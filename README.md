@@ -1,4 +1,4 @@
-# recombination_sim
+# simRec
 
 A Python simulation of mitotic recombination and loss of heterozygosity (LOH) in a diploid yeast chromosome. Models a complete cell cycle — replication, inter-homolog recombination, segregation, and selection — and produces linear haplotype and LOH maps of the resulting genome state.
 
