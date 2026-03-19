@@ -459,6 +459,249 @@ def compute_loh(cell):
     return merge_segments(result)
 
 
+def classify_events(cell):
+    """
+    Post-hoc classification of recombination events from the LOH pattern
+    of a pre-replication cell.
+
+    Classification rules
+    --------------------
+    The LOH segment list (from compute_loh) is scanned for runs of non-"het"
+    blocks. Each such run is classified as one of:
+
+        GC-NCO   : LOH block flanked by "het" on both sides (including CEN,
+                   which is treated as "het"). Flanking haplotypes are the
+                   same on both sides.
+
+        GC-CO    : LOH block flanked by "het" on both sides but the haplotype
+                   of the sequence on either side of the LOH block switches,
+                   indicating a crossover associated with the GC.
+
+        CO-terminal : LOH block that extends to a telomere (start == 1 or
+                      end == chrom_length). Reported with the CEN-proximal
+                      boundary as the event boundary. Multiple abutting
+                      terminal blocks on the same arm are each reported
+                      separately as CO-terminal events.
+
+        TEL-TEL  : The entire chromosome is LOH with no het regions.
+                   Reported as two CO-terminal events, one per arm, using
+                   the centromere boundaries as the notional crossover sites.
+
+    For each event a record dict is returned:
+
+        {
+            "type"          : "GC-NCO" | "GC-CO" | "CO-terminal",
+            "start"         : int,   # first bp of LOH block
+            "end"           : int,   # last bp of LOH block
+            "haplotype"     : str,   # "A" or "B" — identity of the LOH block
+            "flanking_left" : str,   # haplotype or "het" or "tel"
+            "flanking_right": str,   # haplotype or "het" or "tel"
+        }
+
+    Parameters
+    ----------
+    cell : dict
+        Pre-replication cell {"A": chrom, "B": chrom}.
+
+    Returns
+    -------
+    list of dict, one record per classified event, in chromosome order.
+    """
+    chrom        = cell["A"]
+    chrom_length = chrom["length"]
+    cen_start, cen_end = _cen_interval(chrom)
+
+    loh_segs = compute_loh(cell)  # list of (start, end, state)
+    n        = len(loh_segs)
+    events   = []
+
+    # ------------------------------------------------------------------
+    # Helper: determine the "flanking haplotype context" to the left and
+    # right of a given LOH block index range [block_start_idx, block_end_idx].
+    # Returns ("het" | "tel" | "A" | "B") for each side.
+    # The CEN interval is treated as "het".
+    # ------------------------------------------------------------------
+    def _flank_left(idx):
+        """Context immediately left of loh_segs[idx]."""
+        seg_start = loh_segs[idx][0]
+        if seg_start == 1:
+            return "tel"
+        # Walk left to find the nearest non-LOH (het or CEN) context
+        prev_idx = idx - 1
+        while prev_idx >= 0:
+            ps, pe, pv = loh_segs[prev_idx]
+            if pv == "het":
+                return "het"
+            # pv is an LOH haplotype — keep walking left to find het/tel
+            prev_idx -= 1
+        return "tel"
+
+    def _flank_right(idx):
+        """Context immediately right of loh_segs[idx]."""
+        seg_end = loh_segs[idx][1]
+        if seg_end == chrom_length:
+            return "tel"
+        next_idx = idx + 1
+        while next_idx < n:
+            ns, ne, nv = loh_segs[next_idx]
+            if nv == "het":
+                return "het"
+            next_idx += 1
+        return "tel"
+
+    def _hap_left_of(idx):
+        """
+        The LOH haplotype of the sequence immediately left of loh_segs[idx],
+        skipping any het or CEN-coincident segments.
+        Returns "het" if the nearest non-LOH context is het/tel/CEN.
+        """
+        prev_idx = idx - 1
+        while prev_idx >= 0:
+            ps, pe, pv = loh_segs[prev_idx]
+            if pv == "het":
+                return "het"
+            if pv in ("A", "B"):
+                return pv
+            prev_idx -= 1
+        return "het"
+
+    def _hap_right_of(idx):
+        """
+        The LOH haplotype of the sequence immediately right of loh_segs[idx].
+        Returns "het" if the nearest non-LOH context is het/tel/CEN.
+        """
+        next_idx = idx + 1
+        while next_idx < n:
+            ns, ne, nv = loh_segs[next_idx]
+            if nv == "het":
+                return "het"
+            if nv in ("A", "B"):
+                return nv
+            next_idx += 1
+        return "het"
+
+    # ------------------------------------------------------------------
+    # Special case: entire chromosome is LOH (no het segments at all).
+    # Report as two CO-terminal events anchored at the CEN boundaries.
+    # ------------------------------------------------------------------
+    loh_states = {v for _, _, v in loh_segs}
+    if "het" not in loh_states:
+        # Collect all LOH segments left of CEN and right of CEN separately
+        left_segs  = [(s, e, v) for s, e, v in loh_segs if e < cen_start]
+        right_segs = [(s, e, v) for s, e, v in loh_segs if s > cen_end]
+        # If no clean split (segment spans CEN), use a representative value
+        if not left_segs:
+            left_segs  = [(s, min(e, cen_start - 1), v)
+                          for s, e, v in loh_segs if s < cen_start]
+        if not right_segs:
+            right_segs = [(max(s, cen_end + 1), e, v)
+                          for s, e, v in loh_segs if e > cen_end]
+
+        if left_segs:
+            left_hap = left_segs[-1][2]
+            events.append({
+                "type":           "CO-terminal",
+                "start":          1,
+                "end":            cen_start - 1,
+                "haplotype":      left_hap,
+                "flanking_left":  "tel",
+                "flanking_right": "het",
+            })
+        if right_segs:
+            right_hap = right_segs[0][2]
+            events.append({
+                "type":           "CO-terminal",
+                "start":          cen_end + 1,
+                "end":            chrom_length,
+                "haplotype":      right_hap,
+                "flanking_left":  "het",
+                "flanking_right": "tel",
+            })
+        return events
+
+    # ------------------------------------------------------------------
+    # General case: walk the LOH segment list and classify each non-het
+    # block.
+    # ------------------------------------------------------------------
+    i = 0
+    while i < n:
+        seg_start, seg_end, state = loh_segs[i]
+
+        if state == "het":
+            i += 1
+            continue
+
+        # state is "A" or "B" — this is an LOH block
+        hap    = state
+        fl     = _flank_left(i)
+        fr     = _flank_right(i)
+
+        touches_left_tel  = (seg_start == 1)
+        touches_right_tel = (seg_end   == chrom_length)
+
+        if touches_left_tel or touches_right_tel:
+            # Terminal LOH — CO-terminal regardless of flanking haplotype.
+            events.append({
+                "type":           "CO-terminal",
+                "start":          seg_start,
+                "end":            seg_end,
+                "haplotype":      hap,
+                "flanking_left":  fl,
+                "flanking_right": fr,
+            })
+
+        else:
+            # Internal LOH block — GC-NCO or GC-CO.
+            # Determine the LOH haplotype context on each side to call CO vs NCO.
+            # Flanking haplotype context: the nearest non-het sequence outside
+            # this LOH block. If that context is het or tel on both sides,
+            # the block is isolated and is NCO.
+            left_hap_context  = _hap_left_of(i)
+            right_hap_context = _hap_right_of(i)
+
+            # If both flanking contexts are het/tel, this is a clean NCO.
+            # If the flanking LOH haplotypes differ on each side, it is a CO.
+            if (left_hap_context in ("het",) and
+                    right_hap_context in ("het",)):
+                event_type = "GC-NCO"
+            elif left_hap_context == right_hap_context:
+                # Same haplotype on both sides — NCO
+                event_type = "GC-NCO"
+            else:
+                # Haplotypes differ across the GC block — CO
+                event_type = "GC-CO"
+
+            events.append({
+                "type":           event_type,
+                "start":          seg_start,
+                "end":            seg_end,
+                "haplotype":      hap,
+                "flanking_left":  fl,
+                "flanking_right": fr,
+            })
+
+        i += 1
+
+    return events
+
+
+def _format_events(events):
+    """
+    Return a formatted string summary of classified events for CLI output.
+    """
+    if not events:
+        return "  (no events detected)"
+    lines = []
+    for e in events:
+        lines.append(
+            f"  {e['type']:<12}  "
+            f"{e['start']:>8} – {e['end']:>8}  "
+            f"[{e['haplotype']}]  "
+            f"left={e['flanking_left']}  right={e['flanking_right']}"
+        )
+    return "\n".join(lines)
+
+
 def _draw_chromosome_bar(ax, segments, y, bar_height, color_map, chrom):
     """Draw one horizontal bar of colored segments plus a centromere tick."""
     for seg_start, seg_end, val in segments:
@@ -613,6 +856,9 @@ if __name__ == "__main__":
     print("\nLOH state:")
     for seg in compute_loh(final_cell):
         print(f"    {seg[0]:>8} – {seg[1]:>8}  [{seg[2]}]")
+
+    print("\nClassified events:")
+    print(_format_events(classify_events(final_cell)))
 
     if args.plot or args.plot_out:
         plot_cell_and_loh(

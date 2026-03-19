@@ -307,3 +307,297 @@ def test_loh_values_valid():
     final = run_simulation(genome, n_gen=15)
     for _, _, val in compute_loh(final):
         assert val in ("A", "B", "het")
+
+
+# ---------------------------------------------------------------------------
+# classify_events
+# ---------------------------------------------------------------------------
+
+from simRec import classify_events
+
+def _make_cell_from_haplotypes(hap_A, hap_B):
+    """
+    Build a minimal cell dict from explicit haplotype segment lists.
+    Uses the standard _simple_chrom for CEN and length metadata,
+    then overwrites the haplotype slot.
+    """
+    cA = _simple_chrom("A")
+    cB = _simple_chrom("B")
+    cA["haplotype"] = hap_A
+    cB["haplotype"] = hap_B
+    return {"A": cA, "B": cB}
+
+# CEN is at 150100-150300 on the 500000 bp test chromosome.
+# Positions used in tests are chosen to be clearly on one arm or the other.
+
+def test_classify_no_events():
+    """Fully heterozygous cell — no events."""
+    cell = {"A": _simple_chrom("A"), "B": _simple_chrom("B")}
+    assert classify_events(cell) == []
+
+def test_classify_gc_nco_internal():
+    """
+    Internal LOH block flanked by het on both sides, same haplotype context
+    outside — GC-NCO.
+    Homolog A: all A except 200000-201000 converted to B.
+    Homolog B: all B.
+    LOH: het | B(200000-201000) | het  -> GC-NCO
+    """
+    cell = _make_cell_from_haplotypes(
+        replace_interval([(1, 500000, "A")], 200000, 201000, "B"),
+        [(1, 500000, "B")],
+    )
+    events = classify_events(cell)
+    assert len(events) == 1
+    e = events[0]
+    assert e["type"]      == "GC-NCO"
+    assert e["start"]     == 200000
+    assert e["end"]       == 201000
+    assert e["haplotype"] == "B"
+    assert e["flanking_left"]  == "het"
+    assert e["flanking_right"] == "het"
+
+def test_classify_gc_co_internal():
+    """
+    Internal LOH block where flanking LOH haplotypes differ — GC-CO.
+    We construct a cell where:
+      Homolog A: B(1-100000) | A(100001-200000) | B(200001-500000)  (left arm CO)
+      Homolog B: all B
+    LOH pattern: B(1-100000) | het(100001-200000) | B(200001-500000)
+    The het block in the middle represents the GC tract on an otherwise
+    terminal-CO chromosome — but here we build a simpler case:
+
+    Simpler: both homologs identical except for an A island in a sea of B:
+      Homolog A: A(1-100000) | B(100001-101000) | A(101001-300000) | B(300001-500000)
+      Homolog B: all B
+    LOH: het(1-100000) | B(100001-101000) | het(101001-300000) | B(300001-500000)
+    The B block at 100001-101000: left context is het, right context is het -> NCO
+    The B block at 300001-500000: touches right telomere -> CO-terminal
+
+    For a pure GC-CO we need flanking LOH haplotypes to differ.
+    Construct:
+      Homolog A: B(1-99000) | A(99001-101000) | B(101001-500000)
+      Homolog B: A(1-99000) | A(99001-101000) | A(101001-500000)  = all A
+    LOH: B(1-99000) | het(99001-101000) | ... wait, hom A on right
+    Actually simpler:
+      Homolog A: B(1-200000) | A(200001-201000) | B(201001-500000)
+      Homolog B: A(1-200000) | A(200001-201000) | A(201001-500000) = all A
+    LOH: het | A(200001-201000) | het
+    flanking left LOH = B (from hom-A region left), flanking right LOH = B -> NCO
+
+    Correct construction for GC-CO:
+      Homolog A: A(1-200000) | B(200001-201000) | A(201001-500000)
+      Homolog B: B(1-200000) | B(200001-201000) | A(201001-500000)
+    LOH: het(1-200000) | B(200001-201000) | het(201001-500000) -> NCO (both flanks het)
+
+    True GC-CO requires LOH on both sides with different haplotypes:
+      Homolog A: B(1-100000) | A(100001-101000) | A(101001-500000)
+      Homolog B: B(1-100000) | A(100001-101000) | B(101001-500000)
+    LOH: B(1-100000) | A(100001-500000 all A) ... need to intersect carefully.
+    Hom A haplotype: B(1-100000), A(100001-500000)
+    Hom B haplotype: B(1-100000), A(100001-101000), B(101001-500000)
+    LOH: B(1-100000) | A(100001-101000) | het(101001-500000)
+    The A block at 100001-101000: left flank = B LOH, right flank = het -> GC-CO
+    """
+    hap_A = [(1, 100000, "B"), (100001, 500000, "A")]
+    hap_B = [(1, 100000, "B"), (100001, 101000, "A"), (101001, 500000, "B")]
+    cell = _make_cell_from_haplotypes(hap_A, hap_B)
+    events = classify_events(cell)
+    # Expect: B(1-100000) terminal CO + A(100001-101000) GC-CO
+    co_term = [e for e in events if e["type"] == "CO-terminal"]
+    gc_co   = [e for e in events if e["type"] == "GC-CO"]
+    assert len(gc_co) == 1
+    e = gc_co[0]
+    assert e["start"]     == 100001
+    assert e["end"]       == 101000
+    assert e["haplotype"] == "A"
+    # Left flank is LOH-B, right flank is het
+    assert e["flanking_left"]  == "tel"   # B block reaches left telomere
+    assert e["flanking_right"] == "het"
+
+def test_classify_co_terminal_right():
+    """
+    Terminal LOH on the right arm (extends to position 500000).
+    Homolog A: A(1-300000) | B(300001-500000)
+    Homolog B: all B
+    LOH: het(1-300000) | B(300001-500000)
+    """
+    hap_A = [(1, 300000, "A"), (300001, 500000, "B")]
+    hap_B = [(1, 500000, "B")]
+    cell = _make_cell_from_haplotypes(hap_A, hap_B)
+    events = classify_events(cell)
+    assert len(events) == 1
+    e = events[0]
+    assert e["type"]           == "CO-terminal"
+    assert e["start"]          == 300001
+    assert e["end"]            == 500000
+    assert e["haplotype"]      == "B"
+    assert e["flanking_left"]  == "het"
+    assert e["flanking_right"] == "tel"
+
+def test_classify_co_terminal_left():
+    """
+    Terminal LOH on the left arm (extends to position 1).
+    Homolog A: B(1-100000) | A(100001-500000)
+    Homolog B: all B
+    LOH: B(1-100000) | het(100001-500000)
+    """
+    hap_A = [(1, 100000, "B"), (100001, 500000, "A")]
+    hap_B = [(1, 500000, "B")]
+    cell = _make_cell_from_haplotypes(hap_A, hap_B)
+    events = classify_events(cell)
+    assert len(events) == 1
+    e = events[0]
+    assert e["type"]           == "CO-terminal"
+    assert e["start"]          == 1
+    assert e["end"]            == 100000
+    assert e["haplotype"]      == "B"
+    assert e["flanking_left"]  == "tel"
+    assert e["flanking_right"] == "het"
+
+def test_classify_tel_tel():
+    """
+    Entire chromosome LOH — two CO-terminal events, one per arm.
+    Both homologs all-A.
+    """
+    cell = {"A": _simple_chrom("A"), "B": _simple_chrom("A")}
+    events = classify_events(cell)
+    assert len(events) == 2
+    types = [e["type"] for e in events]
+    assert all(t == "CO-terminal" for t in types)
+    # One event should end at the left of the CEN, one should start at the right
+    cen_start = 150100
+    cen_end   = 150300
+    left_event  = next(e for e in events if e["end"]   < cen_start)
+    right_event = next(e for e in events if e["start"] > cen_end)
+    assert left_event["flanking_left"]   == "tel"
+    assert left_event["flanking_right"]  == "het"
+    assert right_event["flanking_left"]  == "het"
+    assert right_event["flanking_right"] == "tel"
+
+def test_classify_abutting_terminal():
+    """
+    Two abutting terminal LOH blocks on the right arm — two CO-terminal events.
+
+    Construction:
+      Homolog A: A(1-200000) | B(200001-350000) | A(350001-500000)
+      Homolog B: A(1-200000) | B(200001-350000) | B(350001-500000)
+
+    LOH map:
+      A(1-200000) | B(200001-350000) | het(350001-500000)
+      Wait — both homologs agree on A and B blocks but differ at 350001+.
+
+    Actually to get two abutting terminal blocks we need the LOH to be:
+      het | B(200001-350000) | A(350001-500000)
+    where the B block is interior-touching-A and the A block hits telomere.
+
+    Construction:
+      Homolog A: A(1-200000) | B(200001-350000) | A(350001-500000)
+      Homolog B: all B
+
+    LOH:
+      het(1-200000) | B(200001-350000) | het(350001-500000)
+    — this gives one B interior block, not two terminal blocks.
+
+    For two abutting terminal blocks we need both to reach pos 500000:
+      Homolog A: A(1-200000) | B(200001-350000) | A(350001-500000)
+      Homolog B: A(1-200000) | A(200001-350000) | A(350001-500000) = all A
+
+    LOH:
+      A(1-200000) | het(200001-350000) | A(350001-500000)
+    — gives two separate A terminal blocks with het in between, both touching telomere indirectly.
+    The A(1-200000) touches left telomere -> CO-terminal left arm.
+    The A(350001-500000) touches right telomere -> CO-terminal right arm.
+    The het block in the middle is the B island on one homolog.
+
+    This is the correct abutting-terminal construction for the RIGHT arm:
+      Homolog A: A(1-300000) | B(300001-400000) | A(400001-500000)
+      Homolog B: A(1-300000) | A(300001-400000) | A(400001-500000) = all A after 300000
+
+    That still gives het | A terminal.
+
+    Simplest valid construction: two different-haplotype terminal blocks on right arm:
+      Homolog A: A(1-200000) | A(200001-350000) | B(350001-500000)
+      Homolog B: A(1-200000) | B(200001-350000) | B(350001-500000)
+
+    LOH:
+      A(1-200000) | het(200001-350000) | B(350001-500000)
+
+    A(1-200000) touches left telomere -> CO-terminal.
+    B(350001-500000) touches right telomere -> CO-terminal.
+    het block in between is as expected.
+    This tests two terminal events (one per arm), with a het gap between them.
+    """
+    hap_A = [(1, 200000, "A"), (200001, 350000, "A"), (350001, 500000, "B")]
+    hap_B = [(1, 200000, "A"), (200001, 350000, "B"), (350001, 500000, "B")]
+    cell = _make_cell_from_haplotypes(hap_A, hap_B)
+    events = classify_events(cell)
+    co_term = [e for e in events if e["type"] == "CO-terminal"]
+    assert len(co_term) == 2
+    left_co  = next(e for e in co_term if e["flanking_left"] == "tel")
+    right_co = next(e for e in co_term if e["flanking_right"] == "tel")
+    assert left_co["start"]  == 1
+    assert left_co["end"]    == 200000
+    assert right_co["start"] == 350001
+    assert right_co["end"]   == 500000
+
+def test_classify_abutting_terminal_same_arm():
+    """
+    Two abutting terminal LOH blocks on the SAME arm (right), different haplotypes.
+    This is the masking edge case from the spec:
+      het | LOH-B(200001-350000) | LOH-A(350001-500000) -> telomere
+
+    Construction:
+      Homolog A: A(1-200000) | B(200001-350000) | A(350001-500000)
+      Homolog B: A(1-200000) | B(200001-350000) | B(350001-500000)
+
+    LOH: A(1-200000) | B(200001-350000) | het(350001-500000)
+    Hmm — the A block on the left reaches the left telomere.
+
+    We need both B and A to abut on the RIGHT side.
+    Construction:
+      Homolog A: A(1-200000) | B(200001-350000) | A(350001-500000)
+      Homolog B: A(1-500000)
+
+    LOH: A(1-200000) | het(200001-350000) | A(350001-500000)
+    Left A block touches left tel; right A block touches right tel.
+    B island in between is het (B on one, A on other). Not what we want.
+
+    True same-arm abutting: need the LOH map to show:
+      het | B(s1-e1) | A(e1+1-500000)  where A reaches telomere
+
+    Construction:
+      Homolog A: A(1-200000) | B(200001-350000) | A(350001-500000)
+      Homolog B: B(1-200000) | B(200001-350000) | A(350001-500000) = B(1-350000)|A(350001+)
+
+    LOH: het(1-200000) | B(200001-350000) | A(350001-500000)
+    B(200001-350000): interior, flanked het left, A right -> GC-CO
+    A(350001-500000): touches right telomere -> CO-terminal
+    """
+    hap_A = [(1, 200000, "A"), (200001, 350000, "B"), (350001, 500000, "A")]
+    hap_B = [(1, 350000, "B"),                        (350001, 500000, "A")]
+    cell = _make_cell_from_haplotypes(hap_A, hap_B)
+    events = classify_events(cell)
+    co_term = [e for e in events if e["type"] == "CO-terminal"]
+    gc_co   = [e for e in events if e["type"] == "GC-CO"]
+    assert len(co_term) == 1
+    assert co_term[0]["start"] == 350001
+    assert co_term[0]["end"]   == 500000
+    assert co_term[0]["flanking_right"] == "tel"
+    assert len(gc_co) == 1
+    assert gc_co[0]["start"] == 200001
+    assert gc_co[0]["end"]   == 350000
+    assert gc_co[0]["flanking_left"]  == "het"
+    # The B block's right flank walks through the terminal A LOH block to the telomere
+    assert gc_co[0]["flanking_right"] == "tel"
+    """All event types from a full simulation must be valid strings."""
+    random.seed(77)
+    genome = {"A": _simple_chrom("A"), "B": _simple_chrom("B")}
+    final = run_simulation(genome, n_gen=20)
+    valid_types = {"GC-NCO", "GC-CO", "CO-terminal"}
+    for e in classify_events(final):
+        assert e["type"] in valid_types
+        assert e["start"] <= e["end"]
+        assert e["haplotype"] in ("A", "B")
+        assert e["flanking_left"]  in ("A", "B", "het", "tel")
+        assert e["flanking_right"] in ("A", "B", "het", "tel")
