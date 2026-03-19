@@ -835,6 +835,7 @@ def plot_cell_and_loh(cell, title="", savepath=None):
 
 if __name__ == "__main__":
     import argparse
+    from datetime import datetime
 
     __version__ = "0.10"
 
@@ -849,33 +850,65 @@ if __name__ == "__main__":
     parser.add_argument("--plot", action="store_true", help="Plot final haplotype and LOH state")
     parser.add_argument("--plot-out", type=str, default=None,
                         help="Save plot to this path (e.g. out.png) instead of displaying interactively")
+    parser.add_argument("--events", action="store_true",
+                        help="Output classified events as tab-separated table with header")
+    parser.add_argument("--events-nh", action="store_true", dest="events_nh",
+                        help="Output classified events as tab-separated table without header (for appending runs)")
     args = parser.parse_args()
 
     if args.seed is not None:
         random.seed(args.seed)
 
     genome = load_genome(args.genome_file, p_rec_default=args.p_rec)
-    print(f"Loaded chromosome '{genome['A']['name']}', length {genome['A']['length']} bp")
-    print(f"Running {args.n_gen} generation(s)...")
 
-    final_cell = run_simulation(genome, n_gen=args.n_gen, gc_min=args.gc_min, gc_max=args.gc_max)
+    # Tab-separated events mode: suppress verbose text output but not plotting
+    if args.events or args.events_nh:
+        final_cell = run_simulation(genome, n_gen=args.n_gen, gc_min=args.gc_min, gc_max=args.gc_max)
+        events = classify_events(final_cell)
+        timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        cols = ("time", "event", "start", "end", "haplotype", "left", "right", "adjacent_to_terminal")
+        if args.events:
+            print("\t".join(cols))
+        for e in events:
+            row = (
+                timestamp,
+                e["type"],
+                str(e["start"]),
+                str(e["end"]),
+                e["haplotype"],
+                e["flanking_left"],
+                e["flanking_right"],
+                str(e["adjacent_to_terminal"]),
+            )
+            print("\t".join(row))
+        if args.plot or args.plot_out:
+            plot_cell_and_loh(
+                final_cell,
+                title=f"After {args.n_gen} generation(s)",
+                savepath=args.plot_out
+            )
+    else:
+        print(f"Loaded chromosome '{genome['A']['name']}', length {genome['A']['length']} bp")
+        print(f"Running {args.n_gen} generation(s)...")
 
-    print("\nFinal haplotype state:")
-    for homolog in ("A", "B"):
-        print(f"  Homolog {homolog}:")
-        for seg in final_cell[homolog]["haplotype"]:
+        final_cell = run_simulation(genome, n_gen=args.n_gen, gc_min=args.gc_min, gc_max=args.gc_max)
+
+        print("\nFinal haplotype state:")
+        for homolog in ("A", "B"):
+            print(f"  Homolog {homolog}:")
+            for seg in final_cell[homolog]["haplotype"]:
+                print(f"    {seg[0]:>8} – {seg[1]:>8}  [{seg[2]}]")
+
+        print("\nLOH state:")
+        for seg in compute_loh(final_cell):
             print(f"    {seg[0]:>8} – {seg[1]:>8}  [{seg[2]}]")
 
-    print("\nLOH state:")
-    for seg in compute_loh(final_cell):
-        print(f"    {seg[0]:>8} – {seg[1]:>8}  [{seg[2]}]")
+        print("\nClassified events:")
+        print(_format_events(classify_events(final_cell)))
 
-    print("\nClassified events:")
-    print(_format_events(classify_events(final_cell)))
-
-    if args.plot or args.plot_out:
-        plot_cell_and_loh(
-            final_cell,
-            title=f"After {args.n_gen} generation(s)",
-            savepath=args.plot_out
-        )
+        if args.plot or args.plot_out:
+            plot_cell_and_loh(
+                final_cell,
+                title=f"After {args.n_gen} generation(s)",
+                savepath=args.plot_out
+            )
