@@ -328,7 +328,227 @@ def _make_cell_from_haplotypes(hap_A, hap_B):
     return {"A": cA, "B": cB}
 
 # CEN is at 150100-150300 on the 500000 bp test chromosome.
-# Positions used in tests are chosen to be clearly on one arm or the other.
+
+def test_classify_no_events():
+    """Fully heterozygous cell — no events."""
+    cell = {"A": _simple_chrom("A"), "B": _simple_chrom("B")}
+    assert classify_events(cell) == []
+
+def test_classify_gc_nco_internal():
+    """
+    GC-NCO: internal LOH block, homolog A identity same on both sides.
+    Homolog A: A(1-199999) | B(200000-201000) | A(201001-500000)
+    Homolog B: all B
+    LOH: het | B(200000-201000) | het
+    Hom A is A on both sides of the block -> NCO.
+    """
+    cell = _make_cell_from_haplotypes(
+        replace_interval([(1, 500000, "A")], 200000, 201000, "B"),
+        [(1, 500000, "B")],
+    )
+    events = classify_events(cell)
+    assert len(events) == 1
+    e = events[0]
+    assert e["type"]               == "GC-NCO"
+    assert e["start"]              == 200000
+    assert e["end"]                == 201000
+    assert e["haplotype"]          == "B"
+    assert e["flanking_left"]      == "het"
+    assert e["flanking_right"]     == "het"
+    assert e["adjacent_to_terminal"] is False
+
+def test_classify_gc_co_phase_switch():
+    """
+    GC-CO via phase switch: homolog A identity differs on each side of block.
+    Homolog A: B(1-24585) | A(24586-29152) | A(29153-500000)
+               = B(1-24585) | A(24586-500000)
+    Homolog B: A(1-24585) | B(24586-500000)
+    LOH: het(1-24585) | het(24586-29152) ... wait, both are different throughout.
+
+    Use the exact case from the real simulation output:
+    Homolog A: B(1-29152) | A(29153-500000)
+    Homolog B: A(1-24585) | B(24586-500000)
+    LOH: het(1-24585) | B(24586-29152) | het(29153-500000)
+    LOH block B(24586-29152):
+      hom A at pos 24585 = B, hom A at pos 29153 = A  -> phase switches -> GC-CO
+    """
+    hap_A = [(1, 29152, "B"), (29153, 500000, "A")]
+    hap_B = [(1, 24585, "A"), (24586, 500000, "B")]
+    cell = _make_cell_from_haplotypes(hap_A, hap_B)
+    events = classify_events(cell)
+    assert len(events) == 1
+    e = events[0]
+    assert e["type"]      == "GC-CO"
+    assert e["start"]     == 24586
+    assert e["end"]       == 29152
+    assert e["haplotype"] == "B"
+    assert e["flanking_left"]  == "het"
+    assert e["flanking_right"] == "het"
+    assert e["adjacent_to_terminal"] is False
+
+def test_classify_gc_nco_no_phase_switch():
+    """
+    GC-NCO: hom A same identity on both sides even though LOH block is
+    flanked by het in opposite phase. Confirms phase-aware test is correct.
+    Homolog A: A(1-200000) | B(200001-201000) | A(201001-500000)
+    Homolog B: B(1-200000) | B(200001-201000) | B(201001-500000) = all B
+    LOH: het | B(200001-201000) | het
+    hom A at 200000 = A, hom A at 201001 = A -> same -> NCO
+    """
+    hap_A = [(1, 200000, "A"), (200001, 201000, "B"), (201001, 500000, "A")]
+    hap_B = [(1, 500000, "B")]
+    cell = _make_cell_from_haplotypes(hap_A, hap_B)
+    events = classify_events(cell)
+    assert len(events) == 1
+    assert events[0]["type"] == "GC-NCO"
+
+def test_classify_co_terminal_right():
+    """Terminal LOH on the right arm."""
+    hap_A = [(1, 300000, "A"), (300001, 500000, "B")]
+    hap_B = [(1, 500000, "B")]
+    cell = _make_cell_from_haplotypes(hap_A, hap_B)
+    events = classify_events(cell)
+    assert len(events) == 1
+    e = events[0]
+    assert e["type"]                 == "CO-terminal"
+    assert e["start"]                == 300001
+    assert e["end"]                  == 500000
+    assert e["haplotype"]            == "B"
+    assert e["flanking_left"]        == "het"
+    assert e["flanking_right"]       == "tel"
+    assert e["adjacent_to_terminal"] is False
+
+def test_classify_co_terminal_left():
+    """Terminal LOH on the left arm."""
+    hap_A = [(1, 100000, "B"), (100001, 500000, "A")]
+    hap_B = [(1, 500000, "B")]
+    cell = _make_cell_from_haplotypes(hap_A, hap_B)
+    events = classify_events(cell)
+    assert len(events) == 1
+    e = events[0]
+    assert e["type"]                 == "CO-terminal"
+    assert e["start"]                == 1
+    assert e["end"]                  == 100000
+    assert e["haplotype"]            == "B"
+    assert e["flanking_left"]        == "tel"
+    assert e["flanking_right"]       == "het"
+    assert e["adjacent_to_terminal"] is False
+
+def test_classify_tel_tel():
+    """Entire chromosome LOH — two CO-terminal events, one per arm."""
+    cell = {"A": _simple_chrom("A"), "B": _simple_chrom("A")}
+    events = classify_events(cell)
+    assert len(events) == 2
+    assert all(e["type"] == "CO-terminal" for e in events)
+    cen_start, cen_end = 150100, 150300
+    left_e  = next(e for e in events if e["end"]   < cen_start)
+    right_e = next(e for e in events if e["start"] > cen_end)
+    assert left_e["flanking_left"]   == "tel"
+    assert left_e["flanking_right"]  == "het"
+    assert right_e["flanking_left"]  == "het"
+    assert right_e["flanking_right"] == "tel"
+
+def test_classify_adjacent_to_terminal_flag():
+    """
+    GC block directly abutting a terminal LOH block (flanking value is an LOH
+    haplotype, not "het") should have adjacent_to_terminal = True.
+
+    Construction: introduce a het region on the left arm so the TEL-TEL
+    special case doesn't fire, while keeping a direct LOH-LOH boundary on
+    the right arm between an interior block and a terminal block.
+
+    Hom A: A(1-100000) | B(100001-299999) | B(300000-349999) | A(350000-500000)
+           = A(1-100000) | B(100001-349999) | A(350000-500000)
+    Hom B: B(1-100000) | B(100001-299999) | B(300000-349999) | A(350000-500000)
+           = B(1-299999) | B(300000-349999) | A(350000-500000)
+           = B(1-349999) | A(350000-500000)
+
+    LOH:
+      het(1-100000)       hom A=A, hom B=B
+      B(100001-299999)    hom A=B, hom B=B  -> LOH-B
+      B(300000-349999)    hom A=B, hom B=B  -> LOH-B (merges with above)
+      A(350000-500000)    hom A=A, hom B=A  -> LOH-A (terminal)
+
+    After merge: het(1-100000) | B(100001-349999) | A(350000-500000)
+    B block touches neither telomere -> internal; right neighbor is A (LOH) -> adjacent=True
+    A block touches right telomere -> CO-terminal
+    """
+    hap_A = [(1, 100000, "A"), (100001, 349999, "B"), (350000, 500000, "A")]
+    hap_B = [(1, 349999, "B"), (350000, 500000, "A")]
+    cell = _make_cell_from_haplotypes(hap_A, hap_B)
+    events = classify_events(cell)
+    gc_nco  = [e for e in events if e["type"] == "GC-NCO"]
+    co_term = [e for e in events if e["type"] == "CO-terminal"]
+    assert len(gc_nco)  == 1
+    assert len(co_term) == 1
+    assert gc_nco[0]["start"]               == 100001
+    assert gc_nco[0]["end"]                 == 349999
+    assert gc_nco[0]["flanking_right"]      == "A"   # direct LOH neighbor
+    assert gc_nco[0]["adjacent_to_terminal"] is True
+    assert co_term[0]["adjacent_to_terminal"] is False
+
+def test_classify_not_adjacent_to_terminal():
+    """
+    GC-NCO block that is NOT near any terminal LOH — adjacent_to_terminal False.
+    """
+    hap_A = replace_interval([(1, 500000, "A")], 200000, 201000, "B")
+    hap_B = [(1, 500000, "B")]
+    cell = _make_cell_from_haplotypes(hap_A, hap_B)
+    events = classify_events(cell)
+    assert len(events) == 1
+    assert events[0]["adjacent_to_terminal"] is False
+
+def test_classify_abutting_terminal():
+    """Two CO-terminal events, one per arm, separated by a het region."""
+    hap_A = [(1, 200000, "A"), (200001, 350000, "A"), (350001, 500000, "B")]
+    hap_B = [(1, 200000, "A"), (200001, 350000, "B"), (350001, 500000, "B")]
+    cell = _make_cell_from_haplotypes(hap_A, hap_B)
+    events = classify_events(cell)
+    co_term = [e for e in events if e["type"] == "CO-terminal"]
+    assert len(co_term) == 2
+    left_co  = next(e for e in co_term if e["flanking_left"]  == "tel")
+    right_co = next(e for e in co_term if e["flanking_right"] == "tel")
+    assert left_co["start"]  == 1
+    assert left_co["end"]    == 200000
+    assert right_co["start"] == 350001
+    assert right_co["end"]   == 500000
+
+def test_classify_abutting_terminal_same_arm():
+    """
+    GC block proximal to a terminal CO on the same arm.
+    Homolog A: A(1-200000) | B(200001-350000) | A(350001-500000)
+    Homolog B: B(1-350000) | A(350001-500000)
+    LOH: het(1-200000) | B(200001-350000) | A(350001-500000)
+    B block: hom A left=A, hom A right=A -> NCO; adjacent to terminal A block
+    A block: touches right tel -> CO-terminal
+    """
+    hap_A = [(1, 200000, "A"), (200001, 350000, "B"), (350001, 500000, "A")]
+    hap_B = [(1, 350000, "B"), (350001, 500000, "A")]
+    cell = _make_cell_from_haplotypes(hap_A, hap_B)
+    events = classify_events(cell)
+    co_term = [e for e in events if e["type"] == "CO-terminal"]
+    gc_nco  = [e for e in events if e["type"] == "GC-NCO"]
+    assert len(co_term) == 1
+    assert co_term[0]["start"] == 350001
+    assert co_term[0]["end"]   == 500000
+    assert len(gc_nco) == 1
+    assert gc_nco[0]["start"]              == 200001
+    assert gc_nco[0]["end"]               == 350000
+    assert gc_nco[0]["adjacent_to_terminal"] is True
+
+def test_classify_event_types_valid():
+    """All event types and fields from a full simulation must be valid."""
+    random.seed(77)
+    genome = {"A": _simple_chrom("A"), "B": _simple_chrom("B")}
+    final = run_simulation(genome, n_gen=20)
+    valid_types = {"GC-NCO", "GC-CO", "CO-terminal"}
+    for e in classify_events(final):
+        assert e["type"] in valid_types
+        assert e["start"] <= e["end"]
+        assert e["haplotype"] in ("A", "B")
+        assert e["flanking_left"]  in ("A", "B", "het", "tel")
+        assert e["flanking_right"] in ("A", "B", "het", "tel")
+        assert isinstance(e["adjacent_to_terminal"], bool)
 
 def test_classify_no_events():
     """Fully heterozygous cell — no events."""
@@ -357,63 +577,7 @@ def test_classify_gc_nco_internal():
     assert e["flanking_left"]  == "het"
     assert e["flanking_right"] == "het"
 
-def test_classify_gc_co_internal():
-    """
-    Internal LOH block where flanking LOH haplotypes differ — GC-CO.
-    We construct a cell where:
-      Homolog A: B(1-100000) | A(100001-200000) | B(200001-500000)  (left arm CO)
-      Homolog B: all B
-    LOH pattern: B(1-100000) | het(100001-200000) | B(200001-500000)
-    The het block in the middle represents the GC tract on an otherwise
-    terminal-CO chromosome — but here we build a simpler case:
 
-    Simpler: both homologs identical except for an A island in a sea of B:
-      Homolog A: A(1-100000) | B(100001-101000) | A(101001-300000) | B(300001-500000)
-      Homolog B: all B
-    LOH: het(1-100000) | B(100001-101000) | het(101001-300000) | B(300001-500000)
-    The B block at 100001-101000: left context is het, right context is het -> NCO
-    The B block at 300001-500000: touches right telomere -> CO-terminal
-
-    For a pure GC-CO we need flanking LOH haplotypes to differ.
-    Construct:
-      Homolog A: B(1-99000) | A(99001-101000) | B(101001-500000)
-      Homolog B: A(1-99000) | A(99001-101000) | A(101001-500000)  = all A
-    LOH: B(1-99000) | het(99001-101000) | ... wait, hom A on right
-    Actually simpler:
-      Homolog A: B(1-200000) | A(200001-201000) | B(201001-500000)
-      Homolog B: A(1-200000) | A(200001-201000) | A(201001-500000) = all A
-    LOH: het | A(200001-201000) | het
-    flanking left LOH = B (from hom-A region left), flanking right LOH = B -> NCO
-
-    Correct construction for GC-CO:
-      Homolog A: A(1-200000) | B(200001-201000) | A(201001-500000)
-      Homolog B: B(1-200000) | B(200001-201000) | A(201001-500000)
-    LOH: het(1-200000) | B(200001-201000) | het(201001-500000) -> NCO (both flanks het)
-
-    True GC-CO requires LOH on both sides with different haplotypes:
-      Homolog A: B(1-100000) | A(100001-101000) | A(101001-500000)
-      Homolog B: B(1-100000) | A(100001-101000) | B(101001-500000)
-    LOH: B(1-100000) | A(100001-500000 all A) ... need to intersect carefully.
-    Hom A haplotype: B(1-100000), A(100001-500000)
-    Hom B haplotype: B(1-100000), A(100001-101000), B(101001-500000)
-    LOH: B(1-100000) | A(100001-101000) | het(101001-500000)
-    The A block at 100001-101000: left flank = B LOH, right flank = het -> GC-CO
-    """
-    hap_A = [(1, 100000, "B"), (100001, 500000, "A")]
-    hap_B = [(1, 100000, "B"), (100001, 101000, "A"), (101001, 500000, "B")]
-    cell = _make_cell_from_haplotypes(hap_A, hap_B)
-    events = classify_events(cell)
-    # Expect: B(1-100000) terminal CO + A(100001-101000) GC-CO
-    co_term = [e for e in events if e["type"] == "CO-terminal"]
-    gc_co   = [e for e in events if e["type"] == "GC-CO"]
-    assert len(gc_co) == 1
-    e = gc_co[0]
-    assert e["start"]     == 100001
-    assert e["end"]       == 101000
-    assert e["haplotype"] == "A"
-    # Left flank is LOH-B, right flank is het
-    assert e["flanking_left"]  == "tel"   # B block reaches left telomere
-    assert e["flanking_right"] == "het"
 
 def test_classify_co_terminal_right():
     """
@@ -571,7 +735,7 @@ def test_classify_abutting_terminal_same_arm():
       Homolog B: B(1-200000) | B(200001-350000) | A(350001-500000) = B(1-350000)|A(350001+)
 
     LOH: het(1-200000) | B(200001-350000) | A(350001-500000)
-    B(200001-350000): interior, flanked het left, A right -> GC-CO
+    B(200001-350000): hom A = A on both sides -> GC-NCO; adjacent to terminal A block.
     A(350001-500000): touches right telomere -> CO-terminal
     """
     hap_A = [(1, 200000, "A"), (200001, 350000, "B"), (350001, 500000, "A")]
@@ -579,25 +743,13 @@ def test_classify_abutting_terminal_same_arm():
     cell = _make_cell_from_haplotypes(hap_A, hap_B)
     events = classify_events(cell)
     co_term = [e for e in events if e["type"] == "CO-terminal"]
-    gc_co   = [e for e in events if e["type"] == "GC-CO"]
+    gc_nco  = [e for e in events if e["type"] == "GC-NCO"]
     assert len(co_term) == 1
-    assert co_term[0]["start"] == 350001
-    assert co_term[0]["end"]   == 500000
+    assert co_term[0]["start"]          == 350001
+    assert co_term[0]["end"]            == 500000
     assert co_term[0]["flanking_right"] == "tel"
-    assert len(gc_co) == 1
-    assert gc_co[0]["start"] == 200001
-    assert gc_co[0]["end"]   == 350000
-    assert gc_co[0]["flanking_left"]  == "het"
-    # The B block's right flank walks through the terminal A LOH block to the telomere
-    assert gc_co[0]["flanking_right"] == "tel"
-    """All event types from a full simulation must be valid strings."""
-    random.seed(77)
-    genome = {"A": _simple_chrom("A"), "B": _simple_chrom("B")}
-    final = run_simulation(genome, n_gen=20)
-    valid_types = {"GC-NCO", "GC-CO", "CO-terminal"}
-    for e in classify_events(final):
-        assert e["type"] in valid_types
-        assert e["start"] <= e["end"]
-        assert e["haplotype"] in ("A", "B")
-        assert e["flanking_left"]  in ("A", "B", "het", "tel")
-        assert e["flanking_right"] in ("A", "B", "het", "tel")
+    # hom A is A on both sides of B block -> NCO, but adjacent to terminal
+    assert len(gc_nco) == 1
+    assert gc_nco[0]["start"]               == 200001
+    assert gc_nco[0]["end"]                 == 350000
+    assert gc_nco[0]["adjacent_to_terminal"] is True
