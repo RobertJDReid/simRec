@@ -293,7 +293,7 @@ def _apply_crossover(chrom_a, chrom_b, gc_start, gc_end):
 # Recombination — main function
 # ---------------------------------------------------------------------------
 
-def recombine(post_rep_cell, gc_min=100, gc_max=5000):
+def recombine(post_rep_cell, gc_min=100, gc_max=5000, co_prob=0.5):
     """
     Simulate recombination on a post-replication cell.
 
@@ -303,7 +303,11 @@ def recombine(post_rep_cell, gc_min=100, gc_max=5000):
           * Sample a valid GC site
           * Pick one chromatid from each sister pair at random
           * Apply gene conversion (donor -> initiator)
-          * 50:50: crossover or not
+          * Crossover with probability co_prob, otherwise NCO
+
+    co_prob : float in [0, 1]
+        Probability that a recombination event results in a crossover.
+        Default 0.5 (1:1 CO:NCO ratio).
 
     Modifies post_rep_cell in place. Returns it for convenience.
     """
@@ -329,7 +333,7 @@ def recombine(post_rep_cell, gc_min=100, gc_max=5000):
 
         _apply_gene_conversion(initiator, donor, gc_start, gc_end)
 
-        if random.random() < 0.5:
+        if random.random() < co_prob:
             _apply_crossover(initiator, donor, gc_start, gc_end)
 
     return post_rep_cell
@@ -386,7 +390,7 @@ def select(daughter1, daughter2):
 # Full generation cycle
 # ---------------------------------------------------------------------------
 
-def run_generation(pre_rep_cell, gc_min=100, gc_max=5000):
+def run_generation(pre_rep_cell, gc_min=100, gc_max=5000, co_prob=0.5):
     """
     Run one complete cell cycle:
         replication -> recombination -> segregation -> selection
@@ -394,12 +398,12 @@ def run_generation(pre_rep_cell, gc_min=100, gc_max=5000):
     Returns the selected daughter as a pre-replication cell.
     """
     post_rep = replicate_cell(pre_rep_cell)
-    recombine(post_rep, gc_min=gc_min, gc_max=gc_max)
+    recombine(post_rep, gc_min=gc_min, gc_max=gc_max, co_prob=co_prob)
     d1, d2 = segregate(post_rep)
     return select(d1, d2)
 
 
-def run_simulation(genome, n_gen=10, gc_min=100, gc_max=5000):
+def run_simulation(genome, n_gen=10, gc_min=100, gc_max=5000, co_prob=0.5):
     """
     Run the simulation for n_gen generations starting from genome.
 
@@ -407,7 +411,7 @@ def run_simulation(genome, n_gen=10, gc_min=100, gc_max=5000):
     """
     cell = genome
     for gen in range(1, n_gen + 1):
-        cell = run_generation(cell, gc_min=gc_min, gc_max=gc_max)
+        cell = run_generation(cell, gc_min=gc_min, gc_max=gc_max, co_prob=co_prob)
     return cell
 
 
@@ -846,6 +850,8 @@ if __name__ == "__main__":
     parser.add_argument("--p-rec", type=float, default=1e-5, dest="p_rec", help="Base recombination probability per bp")
     parser.add_argument("--gc-min", type=int, default=100, dest="gc_min", help="Min GC tract size (bp)")
     parser.add_argument("--gc-max", type=int, default=5000, dest="gc_max", help="Max GC tract size (bp)")
+    parser.add_argument("--co-nco", type=float, default=0.5, dest="co_prob",
+                        help="Probability of crossover per recombination event (default: 0.5, i.e. 1:1 CO:NCO)")
     parser.add_argument("--seed", type=int, default=None, help="Random seed")
     parser.add_argument("--plot", action="store_true", help="Plot final haplotype and LOH state")
     parser.add_argument("--plot-out", type=str, default=None,
@@ -863,7 +869,8 @@ if __name__ == "__main__":
 
     # Tab-separated events mode: suppress verbose text output but not plotting
     if args.events or args.events_nh:
-        final_cell = run_simulation(genome, n_gen=args.n_gen, gc_min=args.gc_min, gc_max=args.gc_max)
+        final_cell = run_simulation(genome, n_gen=args.n_gen, gc_min=args.gc_min,
+                                    gc_max=args.gc_max, co_prob=args.co_prob)
         events = classify_events(final_cell)
         timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         cols = ("time", "event", "start", "end", "haplotype", "left", "right", "adjacent_to_terminal")
@@ -891,7 +898,8 @@ if __name__ == "__main__":
         print(f"Loaded chromosome '{genome['A']['name']}', length {genome['A']['length']} bp")
         print(f"Running {args.n_gen} generation(s)...")
 
-        final_cell = run_simulation(genome, n_gen=args.n_gen, gc_min=args.gc_min, gc_max=args.gc_max)
+        final_cell = run_simulation(genome, n_gen=args.n_gen, gc_min=args.gc_min,
+                                    gc_max=args.gc_max, co_prob=args.co_prob)
 
         print("\nFinal haplotype state:")
         for homolog in ("A", "B"):

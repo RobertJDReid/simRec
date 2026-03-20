@@ -753,3 +753,51 @@ def test_classify_abutting_terminal_same_arm():
     assert gc_nco[0]["start"]               == 200001
     assert gc_nco[0]["end"]                 == 350000
     assert gc_nco[0]["adjacent_to_terminal"] is True
+
+
+# ---------------------------------------------------------------------------
+# CO probability (co_prob)
+# ---------------------------------------------------------------------------
+
+def test_co_prob_zero_produces_no_crossovers():
+    """With co_prob=0.0, all events should be NCO — no terminal LOH."""
+    random.seed(99)
+    genome = {"A": _simple_chrom("A"), "B": _simple_chrom("B")}
+    final = run_simulation(genome, n_gen=20, co_prob=0.0)
+    from simRec import classify_events
+    events = classify_events(final)
+    co_events = [e for e in events if e["type"] in ("CO-terminal", "GC-CO")]
+    assert len(co_events) == 0, f"Expected no CO events with co_prob=0, got: {co_events}"
+
+def test_co_prob_one_produces_no_nco():
+    """With co_prob=1.0, every recombination event is a crossover.
+    The classifier may still call GC-NCO on some blocks due to haplotype
+    context, but there should be CO-terminal events present, and no
+    GC-CO events (since phase-switch detection classifies those separately).
+    More importantly, isolated GC-NCO blocks (adjacent_to_terminal=False)
+    should be absent when all events are crossovers."""
+    random.seed(12)
+    genome = {"A": _simple_chrom("A"), "B": _simple_chrom("B")}
+    final = run_simulation(genome, n_gen=10, co_prob=1.0)
+    from simRec import classify_events
+    events = classify_events(final)
+    # With all COs there should be terminal LOH
+    co_term = [e for e in events if e["type"] == "CO-terminal"]
+    assert len(co_term) > 0, "Expected at least one CO-terminal event with co_prob=1"
+    # Any GC-NCO blocks present should be part of a terminal cluster
+    isolated_nco = [e for e in events
+                    if e["type"] == "GC-NCO" and not e["adjacent_to_terminal"]]
+    assert len(isolated_nco) == 0, f"Unexpected isolated NCO events: {isolated_nco}"
+
+def test_co_prob_default_unchanged():
+    """Default co_prob=0.5 should reproduce the same result as before."""
+    random.seed(42)
+    genome = {"A": _simple_chrom("A"), "B": _simple_chrom("B")}
+    result_default = run_simulation(genome, n_gen=5)
+
+    random.seed(42)
+    genome = {"A": _simple_chrom("A"), "B": _simple_chrom("B")}
+    result_explicit = run_simulation(genome, n_gen=5, co_prob=0.5)
+
+    assert result_default["A"]["haplotype"] == result_explicit["A"]["haplotype"]
+    assert result_default["B"]["haplotype"] == result_explicit["B"]["haplotype"]
