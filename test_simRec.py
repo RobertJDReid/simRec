@@ -760,14 +760,18 @@ def test_classify_abutting_terminal_same_arm():
 # ---------------------------------------------------------------------------
 
 def test_co_prob_zero_produces_no_crossovers():
-    """With co_prob=0.0, all events should be NCO — no terminal LOH."""
+    """With co_prob=0.0, no mechanical crossovers fire.
+    CO-terminal events (which require a mechanical crossover) should be absent.
+    GC-CO calls from the classifier may still appear because with symmetric
+    initiation, a B-initiated GC into A creates a phase switch indistinguishable
+    from a GC-CO by post-hoc analysis — but no terminal LOH should result."""
     random.seed(99)
     genome = {"A": _simple_chrom("A"), "B": _simple_chrom("B")}
     final = run_simulation(genome, n_gen=20, co_prob=0.0)
     from simRec import classify_events
     events = classify_events(final)
-    co_events = [e for e in events if e["type"] in ("CO-terminal", "GC-CO")]
-    assert len(co_events) == 0, f"Expected no CO events with co_prob=0, got: {co_events}"
+    co_term = [e for e in events if e["type"] == "CO-terminal"]
+    assert len(co_term) == 0, f"Expected no CO-terminal events with co_prob=0, got: {co_term}"
 
 def test_co_prob_one_produces_no_nco():
     """With co_prob=1.0, every recombination event is a crossover.

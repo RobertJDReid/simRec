@@ -322,9 +322,11 @@ def recombine(post_rep_cell, gc_min=100, gc_max=5000, co_prob=0.5):
     n_events = _poisson_draw(lam)
 
     for _ in range(n_events):
-        # Pick one chromatid from each homolog pair
-        initiator = random.choice(chroms_A)
-        donor = random.choice(chroms_B)
+        # Pick one chromatid from each homolog pair, randomly assigning
+        # which homolog initiates and which donates
+        pair1, pair2 = random.sample([chroms_A, chroms_B], 2)
+        initiator = random.choice(pair1)
+        donor     = random.choice(pair2)
 
         site = _sample_gc_site(initiator, gc_min, gc_max)
         if site is None:
