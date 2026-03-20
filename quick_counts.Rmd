@@ -1,0 +1,26 @@
+---
+title: "Summary"
+author: "Robert Reid"
+date: "2026-03-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Summarize many events
+
+Get useful summary of 100 runs of simulation
+
+Each is `python simRec.py genome_chrI.csv --n-gen 500 --p-rec 5e-8 --events`
+
+```{r summary}
+results <- read_delim("results.tsv", delim = "\t", 
+    escape_double = FALSE, trim_ws = TRUE)
+
+results |> count(event)
+
+```
+
