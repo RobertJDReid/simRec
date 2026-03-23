@@ -1,0 +1,36 @@
+---
+title: "Recombination Modeling"
+author: "Robert Reid"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## WT cells
+
+Recombination modeling of wild type cells based on the work of Sui
+and Petes, 2020.
+Recombination was simulated with functions in `simRec.py` and
+multiple cells were simulated using `simRec_batch.py`.
+The lower limit of basal recombination rate for unperturbed growth
+from Sui and Petes of 3.7e-10 per generation per basepair was
+used for simulation of 83 cells at 3000 generations per batch.
+Accumulated data will be loaded and plotted.
+
+#### Load data
+
+```{r load data, echo=FALSE, message=FALSE, warning=FALSE}
+f = list.files("test_batches/",pattern = "*.tsv",full.names = TRUE)
+bd = map(f,function(f){
+  fc = read_delim(f)
+  fct = table(fc$event)
+  return(fct)
+}) |>
+  bind_rows()
+
+```
+
