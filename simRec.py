@@ -309,7 +309,17 @@ def recombine(post_rep_cell, gc_min=100, gc_max=5000, co_prob=0.5):
         Probability that a recombination event results in a crossover.
         Default 0.5 (1:1 CO:NCO ratio).
 
-    Modifies post_rep_cell in place. Returns it for convenience.
+    Modifies post_rep_cell in place.
+
+    Returns
+    -------
+    list of dict
+        One entry per recombination event that fired, with keys:
+            chrom    : chromosome name
+            type     : "GC" (gene conversion only) or "CO" (crossover + GC)
+            start    : GC tract start position
+            end      : GC tract end position
+        Empty list if no events occurred.
     """
     chroms_A = post_rep_cell["A"]
     chroms_B = post_rep_cell["B"]
@@ -320,6 +330,7 @@ def recombine(post_rep_cell, gc_min=100, gc_max=5000, co_prob=0.5):
     lam = mean_p_rec * ref_chrom["length"]
 
     n_events = _poisson_draw(lam)
+    logged = []
 
     for _ in range(n_events):
         # Pick one chromatid from each homolog pair, randomly assigning
@@ -337,8 +348,18 @@ def recombine(post_rep_cell, gc_min=100, gc_max=5000, co_prob=0.5):
 
         if random.random() < co_prob:
             _apply_crossover(initiator, donor, gc_start, gc_end)
+            event_type = "CO"
+        else:
+            event_type = "GC"
 
-    return post_rep_cell
+        logged.append({
+            "chrom": initiator["name"],
+            "type":  event_type,
+            "start": gc_start,
+            "end":   gc_end,
+        })
+
+    return post_rep_cell, logged
 
 
 def _poisson_draw(lam):
@@ -397,24 +418,49 @@ def run_generation(pre_rep_cell, gc_min=100, gc_max=5000, co_prob=0.5):
     Run one complete cell cycle:
         replication -> recombination -> segregation -> selection
 
-    Returns the selected daughter as a pre-replication cell.
+    Returns
+    -------
+    cell : dict
+        The selected daughter as a pre-replication cell.
+    logged : list of dict
+        Recombination events that fired this generation, each with keys:
+        chrom, type ("GC" or "CO"), start, end.
     """
     post_rep = replicate_cell(pre_rep_cell)
-    recombine(post_rep, gc_min=gc_min, gc_max=gc_max, co_prob=co_prob)
+    post_rep, logged = recombine(post_rep, gc_min=gc_min, gc_max=gc_max,
+                                 co_prob=co_prob)
     d1, d2 = segregate(post_rep)
-    return select(d1, d2)
+    return select(d1, d2), logged
 
 
 def run_simulation(genome, n_gen=10, gc_min=100, gc_max=5000, co_prob=0.5):
     """
     Run the simulation for n_gen generations starting from genome.
 
-    Returns the final pre-replication cell.
+    Returns
+    -------
+    cell : dict
+        The final pre-replication cell.
+    event_log : list of dict
+        All recombination events across all generations, each with keys:
+        gen (1-based), chrom, type ("GC" or "CO"), start, end.
+    haplotype_snapshots : list of (int, dict)
+        One (gen, cell) pair for each generation in which at least one
+        recombination event fired, capturing the post-selection haplotype
+        state. Generations with no events are omitted.
     """
-    cell = genome
+    cell                = genome
+    event_log           = []
+    haplotype_snapshots = []
     for gen in range(1, n_gen + 1):
-        cell = run_generation(cell, gc_min=gc_min, gc_max=gc_max, co_prob=co_prob)
-    return cell
+        cell, logged = run_generation(cell, gc_min=gc_min, gc_max=gc_max,
+                                      co_prob=co_prob)
+        if logged:
+            for entry in logged:
+                entry["gen"] = gen
+                event_log.append(entry)
+            haplotype_snapshots.append((gen, cell))
+    return cell, event_log, haplotype_snapshots
 
 
 # ---------------------------------------------------------------------------
@@ -465,7 +511,7 @@ def compute_loh(cell):
     return merge_segments(result)
 
 
-def classify_events(cell):
+def classify_events(cell, gc_max=5000):
     """
     Post-hoc classification of recombination events from the LOH pattern
     of a pre-replication cell.
@@ -475,55 +521,32 @@ def classify_events(cell):
     The LOH segment list (from compute_loh) is scanned for non-"het" blocks.
     Each is classified as one of:
 
-        GC-NCO      : Internal LOH block (not touching a telomere) where the
-                      haplotype phase on homolog A does NOT switch across the
-                      block (same identity immediately left and right on hom A).
+        GC-NCO      : Internal LOH block ≤ gc_max where the haplotype phase
+                      on homolog A does NOT switch across the block.
 
-        GC-CO       : Internal LOH block where the haplotype phase on homolog A
-                      DOES switch across the block (hom A goes e.g. B→A while
-                      hom B goes A→B), indicating an associated crossover.
+        GC-CO       : Internal LOH block ≤ gc_max where the haplotype phase
+                      on homolog A DOES switch across the block.
+
+        DCO         : Internal LOH block > gc_max flanked by het on both sides.
+                      Cannot be a gene conversion; interpreted as a double
+                      crossover bracketing the region.
 
         CO-terminal : LOH block that extends to a telomere (start == 1 or
-                      end == chrom_length). Multiple abutting terminal blocks
-                      on the same arm are each reported separately.
+                      end == chrom_length).
 
         TEL-TEL     : Entire chromosome is LOH. Reported as two CO-terminal
                       events anchored at the CEN boundaries.
 
-    Phase-aware CO/NCO detection
-    ----------------------------
-    For internal blocks, CO vs NCO is determined by querying the haplotype
-    of homolog A at the position immediately flanking the LOH block on each
-    side. If the identity of homolog A is the same on both sides, the phase
-    has not switched and the event is NCO. If it differs, the phase has
-    switched and the event is CO. This correctly handles cases where the LOH
-    block is surrounded by heterozygous sequence that is in opposite phase
-    on each side.
-
-    Adjacent-to-terminal flag
-    -------------------------
-    Every internal GC event (NCO or CO) that directly abuts a CO-terminal
-    block in the LOH map carries "adjacent_to_terminal": True. This flags
-    the interpretation ambiguity: the block may be a genuine prior GC event
-    that was subsequently flanked by a terminal CO, or it may be an artefact
-    of multiple overlapping terminal events.
-
-    Output record fields
-    --------------------
-        type                : "GC-NCO" | "GC-CO" | "CO-terminal"
-        start               : int   first bp of LOH block
-        end                 : int   last bp of LOH block
-        haplotype           : str   "A" or "B"
-        flanking_left       : str   "het" | "tel"
-        flanking_right      : str   "het" | "tel"
-        adjacent_to_terminal: bool  True if immediately adjacent to a
-                                    CO-terminal block (GC events only;
-                                    always False for CO-terminal records)
+    Blocks > gc_max with a LOH neighbor on either side receive type "GC-NCO"
+    with complex=True, flagging them for case-by-case examination.
 
     Parameters
     ----------
     cell : dict
         Pre-replication cell {"A": chrom, "B": chrom}.
+    gc_max : int
+        Maximum gene conversion tract size used in the simulation (default 5000).
+        Internal blocks exceeding this size are classified as DCO or complex.
 
     Returns
     -------
@@ -671,7 +694,35 @@ def classify_events(cell):
             })
 
         else:
-            # Phase-aware CO/NCO detection.
+            size = seg_end - seg_start + 1
+
+            # Size check: blocks larger than gc_max cannot be gene conversions.
+            # Classify by flanking context:
+            #   het on both sides → DCO (double crossover bracketing the region)
+            #   LOH neighbor on either side → complex (ambiguous, examine by case)
+            if size > gc_max:
+                if fl in ("het", "tel") and fr in ("het", "tel"):
+                    event_type = "DCO"
+                else:
+                    event_type = "GC-NCO"  # placeholder; complex flag set below
+
+                adj = _adjacent_to_terminal(fl, fr)
+
+                rec = {
+                    "type":                 event_type,
+                    "start":                seg_start,
+                    "end":                  seg_end,
+                    "haplotype":            hap,
+                    "flanking_left":        fl,
+                    "flanking_right":       fr,
+                    "adjacent_to_terminal": adj,
+                }
+                if event_type != "DCO":
+                    rec["complex"] = True
+                events.append(rec)
+                continue
+
+            # Phase-aware CO/NCO detection for blocks within gc_max size.
             # Query homolog A haplotype just outside the LOH block on each side.
             # Use positions seg_start-1 and seg_end+1 (safe because block is
             # internal — neither boundary is 1 or chrom_length).
@@ -697,6 +748,224 @@ def classify_events(cell):
     return events
 
 
+def reclassify_terminal_clusters(events, gc_max=5000):
+    """
+    Apply heuristic reclassification to contiguous terminal LOH clusters.
+
+    A terminal cluster is a maximal run of LOH blocks on one arm with no
+    het gaps where at least one block touches a telomere.
+
+    Rules
+    -----
+    Two-block cluster:
+        Both blocks → CO-terminal. No further processing.
+
+    Three-or-more block cluster:
+        Interior blocks (flanked by LOH on both sides, not touching het/tel)
+        are candidates for GC-NCO extraction if:
+          - size <= gc_max, AND
+          - both immediate LOH neighbors share the same haplotype
+
+        If neighbors differ → block tagged "complex" (left as CO-terminal).
+
+        After GC-NCO extraction, adjacent same-haplotype CO-terminal blocks
+        are merged into a single record spanning their combined range.
+        The merged record inherits the flanking values of the outermost
+        original blocks (left flank of first, right flank of last).
+
+        Blocks > gc_max or touching het remain CO-terminal individually.
+
+    The adjacent_to_terminal flag is preserved on extracted GC-NCO records.
+    All flanking values are from the original LOH map neighbors.
+
+    Parameters
+    ----------
+    events : list of dict
+        Output of classify_events().
+    gc_max : int
+        Maximum gene conversion tract size used in the simulation.
+
+    Returns
+    -------
+    list of dict
+        Reclassified events sorted by start position. New/modified events
+        have a 'reclassified' key set to True. A 'complex' key is set to
+        True on blocks that could not be cleanly resolved.
+    """
+
+    # -----------------------------------------------------------------------
+    # Partition events into terminal clusters and non-cluster events
+    # -----------------------------------------------------------------------
+    # A terminal cluster is a maximal contiguous sequence of CO-terminal or
+    # adjacent-to-terminal events with no het gap between them.
+    # We identify them by grouping events whose flanking values connect
+    # them to each other (either flanking_left or flanking_right is a
+    # haplotype value, not "het" or "tel") and at least one touches a tel.
+
+    # Work on a copy sorted by start position
+    events = sorted(events, key=lambda e: e["start"])
+
+    # Find indices of all events that are in a terminal cluster.
+    # Strategy: collect runs of events where each is adjacent_to_terminal
+    # or CO-terminal and they form a contiguous LOH run (no het between them).
+    def _in_terminal_run(e):
+        return e["type"] == "CO-terminal" or e.get("adjacent_to_terminal", False)
+
+    # Group consecutive events that are part of terminal runs
+    groups   = []   # list of (is_terminal_cluster, [event_indices])
+    i        = 0
+    n        = len(events)
+
+    while i < n:
+        if _in_terminal_run(events[i]):
+            # Collect the full contiguous terminal run
+            run = [i]
+            j   = i + 1
+            while j < n and _in_terminal_run(events[j]):
+                run.append(j)
+                j += 1
+            # Only treat as a cluster if it actually contains a CO-terminal
+            has_terminal = any(events[k]["type"] == "CO-terminal" for k in run)
+            if has_terminal:
+                groups.append(("cluster", run))
+            else:
+                for k in run:
+                    groups.append(("solo", [k]))
+            i = j
+        else:
+            groups.append(("solo", [i]))
+            i += 1
+
+    # -----------------------------------------------------------------------
+    # Process each group
+    # -----------------------------------------------------------------------
+    result = []
+
+    for kind, indices in groups:
+        if kind == "solo":
+            result.append(events[indices[0]])
+            continue
+
+        cluster = [events[k] for k in indices]
+        m       = len(cluster)
+
+        # Two-block rule: both become CO-terminal
+        if m == 2:
+            for e in cluster:
+                rec = dict(e)
+                rec["type"]         = "CO-terminal"
+                rec["reclassified"] = True
+                result.append(rec)
+            continue
+
+        # Three-or-more: extract GC-NCO islands then merge CO-terminal runs
+        # ------------------------------------------------------------------
+        # Pass 1: mark each block as GC-NCO, CO-terminal, or complex
+        # ------------------------------------------------------------------
+        labels = []   # "co-terminal" | "gc-nco" | "complex"
+        for idx, e in enumerate(cluster):
+            # Blocks touching het or tel on either side cannot be GC-NCO
+            if e["flanking_left"] in ("het", "tel") or \
+               e["flanking_right"] in ("het", "tel"):
+                labels.append("co-terminal")
+                continue
+
+            # Interior block: check size and neighbor haplotypes
+            size         = e["end"] - e["start"] + 1
+            left_hap     = e["flanking_left"]   # haplotype of left LOH neighbor
+            right_hap    = e["flanking_right"]  # haplotype of right LOH neighbor
+
+            if size <= gc_max and left_hap == right_hap:
+                labels.append("gc-nco")
+            elif size <= gc_max and left_hap != right_hap:
+                labels.append("complex")
+            else:
+                labels.append("co-terminal")
+
+        # ------------------------------------------------------------------
+        # Pass 2: merge adjacent co-terminal blocks of the same haplotype
+        # ------------------------------------------------------------------
+        # Build a list of (label, event) pairs after extraction
+        tagged = list(zip(labels, cluster))
+
+        # Emit GC-NCO and complex blocks as individual records;
+        # collect runs of co-terminal blocks for merging
+        co_run = []   # accumulator for current CO-terminal run
+
+        def _flush_co_run(run):
+            """Merge a run of CO-terminal blocks into one record."""
+            if not run:
+                return []
+            if len(run) == 1:
+                rec = dict(run[0])
+                rec["type"]         = "CO-terminal"
+                rec["reclassified"] = True
+                return [rec]
+            # All same haplotype (guaranteed by merge logic below)
+            merged = dict(run[0])
+            merged["type"]           = "CO-terminal"
+            merged["end"]            = run[-1]["end"]
+            merged["flanking_right"] = run[-1]["flanking_right"]
+            merged["reclassified"]   = True
+            return [merged]
+
+        out_records = []
+        for label, e in tagged:
+            if label == "co-terminal":
+                # Only merge with run if same haplotype as current run
+                if co_run and co_run[-1]["haplotype"] != e["haplotype"]:
+                    out_records.extend(_flush_co_run(co_run))
+                    co_run = []
+                co_run.append(e)
+            else:
+                # Flush any pending CO-terminal run first
+                out_records.extend(_flush_co_run(co_run))
+                co_run = []
+                rec = dict(e)
+                rec["type"]         = "GC-NCO" if label == "gc-nco" else e["type"]
+                rec["reclassified"] = True
+                if label == "complex":
+                    rec["complex"]  = True
+                    rec["type"]     = "CO-terminal"
+                out_records.append(rec)
+
+        out_records.extend(_flush_co_run(co_run))
+
+        # Second pass: merge CO-terminal records of the same haplotype that
+        # are separated only by GC-NCO islands (the islands are preserved).
+        final_records = []
+        for rec in out_records:
+            if rec["type"] == "GC-NCO":
+                # Check if the last CO-terminal and the next CO-terminal
+                # (after this island) will be same haplotype — handled lazily:
+                # just append and let the CO-terminal merge on the next CO hit
+                final_records.append(rec)
+            elif rec["type"] == "CO-terminal":
+                # Find the most recent CO-terminal in final_records (skipping
+                # any intervening GC-NCO islands)
+                prev_co_idx = None
+                for k in range(len(final_records) - 1, -1, -1):
+                    if final_records[k]["type"] == "CO-terminal":
+                        prev_co_idx = k
+                        break
+                    elif final_records[k]["type"] != "GC-NCO":
+                        break  # hit something else — don't merge
+
+                if (prev_co_idx is not None
+                        and final_records[prev_co_idx]["haplotype"] == rec["haplotype"]):
+                    # Merge: extend the previous CO-terminal
+                    final_records[prev_co_idx]["end"]            = rec["end"]
+                    final_records[prev_co_idx]["flanking_right"] = rec["flanking_right"]
+                else:
+                    final_records.append(rec)
+            else:
+                final_records.append(rec)
+
+        result.extend(final_records)
+
+    return sorted(result, key=lambda e: e["start"])
+
+
 def _format_events(events):
     """
     Return a formatted string summary of classified events for CLI output.
@@ -705,15 +974,20 @@ def _format_events(events):
         return "  (no events detected)"
     lines = []
     for e in events:
-        adj = ""
+        tags = []
         if e.get("adjacent_to_terminal"):
-            adj = "  [adjacent-to-terminal]"
+            tags.append("adjacent-to-terminal")
+        if e.get("reclassified"):
+            tags.append("reclassified")
+        if e.get("complex"):
+            tags.append("complex")
+        tag_str = ("  [" + ", ".join(tags) + "]") if tags else ""
         lines.append(
             f"  {e['type']:<12}  "
             f"{e['start']:>8} – {e['end']:>8}  "
             f"[{e['haplotype']}]  "
             f"left={e['flanking_left']}  right={e['flanking_right']}"
-            f"{adj}"
+            f"{tag_str}"
         )
     return "\n".join(lines)
 
@@ -862,6 +1136,11 @@ if __name__ == "__main__":
                         help="Output classified events as tab-separated table with header")
     parser.add_argument("--events-nh", action="store_true", dest="events_nh",
                         help="Output classified events as tab-separated table without header (for appending runs)")
+    parser.add_argument("--log-events", type=str, default=None, dest="log_events",
+                        metavar="FILE",
+                        help="Write true recombination events to FILE as CSV "
+                             "(default filename: events.csv). "
+                             "Columns: gen, chrom, type, start, end")
     args = parser.parse_args()
 
     if args.seed is not None:
@@ -869,16 +1148,49 @@ if __name__ == "__main__":
 
     genome = load_genome(args.genome_file, p_rec_default=args.p_rec)
 
+    def _write_event_log(event_log, path):
+        """Write the true event log to a CSV file."""
+        log_path = path if path != "" else "events.csv"
+        with open(log_path, "w") as fh:
+            fh.write("gen,chrom,type,start,end\n")
+            for e in event_log:
+                fh.write(f"{e['gen']},{e['chrom']},{e['type']},"
+                         f"{e['start']},{e['end']}\n")
+
+    def _write_haplotype_map(haplotype_snapshots, log_path="events.csv"):
+        """
+        Write a text listing of haplotype segments for each generation in
+        which events fired. Only generations with events are written.
+        Written to haplotype.txt in the same directory as the log file.
+        """
+        import os
+        hap_path = os.path.join(os.path.dirname(log_path), "haplotype.txt")
+        with open(hap_path, "w") as fh:
+            for gen, cell in haplotype_snapshots:
+                chrom_name = cell["A"]["name"]
+                fh.write(f"Generation {gen}  Chr {chrom_name}\n")
+                for homolog in ("A", "B"):
+                    fh.write(f"  Homolog {homolog}:\n")
+                    for seg_start, seg_end, hap in cell[homolog]["haplotype"]:
+                        fh.write(f"    {seg_start:>8} – {seg_end:>8}  [{hap}]\n")
+                fh.write("\n")
+
     # Tab-separated events mode: suppress verbose text output but not plotting
     if args.events or args.events_nh:
-        final_cell = run_simulation(genome, n_gen=args.n_gen, gc_min=args.gc_min,
-                                    gc_max=args.gc_max, co_prob=args.co_prob)
-        events = classify_events(final_cell)
-        timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-        cols = ("time", "event", "start", "end", "haplotype", "left", "right", "adjacent_to_terminal")
+        final_cell, event_log, haplotype_snapshots = run_simulation(
+            genome, n_gen=args.n_gen, gc_min=args.gc_min,
+            gc_max=args.gc_max, co_prob=args.co_prob)
+        if args.log_events is not None:
+            _write_event_log(event_log, args.log_events or "events.csv")
+            _write_haplotype_map(haplotype_snapshots, args.log_events or "events.csv")
+        events     = classify_events(final_cell, gc_max=args.gc_max)
+        reclass    = reclassify_terminal_clusters(events, gc_max=args.gc_max)
+        timestamp  = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        cols = ("time", "event", "start", "end", "haplotype", "left", "right",
+                "adjacent_to_terminal", "reclassified", "complex")
         if args.events:
             print("\t".join(cols))
-        for e in events:
+        for e in reclass:
             row = (
                 timestamp,
                 e["type"],
@@ -887,7 +1199,9 @@ if __name__ == "__main__":
                 e["haplotype"],
                 e["flanking_left"],
                 e["flanking_right"],
-                str(e["adjacent_to_terminal"]),
+                str(e.get("adjacent_to_terminal", False)),
+                str(e.get("reclassified", False)),
+                str(e.get("complex", False)),
             )
             print("\t".join(row))
         if args.plot or args.plot_out:
@@ -900,8 +1214,13 @@ if __name__ == "__main__":
         print(f"Loaded chromosome '{genome['A']['name']}', length {genome['A']['length']} bp")
         print(f"Running {args.n_gen} generation(s)...")
 
-        final_cell = run_simulation(genome, n_gen=args.n_gen, gc_min=args.gc_min,
-                                    gc_max=args.gc_max, co_prob=args.co_prob)
+        final_cell, event_log, haplotype_snapshots = run_simulation(
+            genome, n_gen=args.n_gen, gc_min=args.gc_min,
+            gc_max=args.gc_max, co_prob=args.co_prob)
+
+        if args.log_events is not None:
+            _write_event_log(event_log, args.log_events or "events.csv")
+            _write_haplotype_map(haplotype_snapshots, args.log_events or "events.csv")
 
         print("\nFinal haplotype state:")
         for homolog in ("A", "B"):
@@ -915,6 +1234,10 @@ if __name__ == "__main__":
 
         print("\nClassified events:")
         print(_format_events(classify_events(final_cell)))
+
+        print("\nReclassified events:")
+        print(_format_events(reclassify_terminal_clusters(
+            classify_events(final_cell), gc_max=args.gc_max)))
 
         if args.plot or args.plot_out:
             plot_cell_and_loh(

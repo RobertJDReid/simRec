@@ -229,7 +229,7 @@ def test_poisson_draw_reasonable_mean():
 def test_full_simulation_runs():
     random.seed(99)
     genome = {"A": _simple_chrom("A"), "B": _simple_chrom("B")}
-    final = run_simulation(genome, n_gen=5)
+    final, _, _ = run_simulation(genome, n_gen=5)
     assert "A" in final and "B" in final
     # Haplotype segments should cover the full chromosome without gaps
     for homolog in ("A", "B"):
@@ -242,7 +242,7 @@ def test_full_simulation_runs():
 def test_haplotype_values_valid():
     random.seed(42)
     genome = {"A": _simple_chrom("A"), "B": _simple_chrom("B")}
-    final = run_simulation(genome, n_gen=20)
+    final, _, _ = run_simulation(genome, n_gen=20)
     for homolog in ("A", "B"):
         for _, _, val in final[homolog]["haplotype"]:
             assert val in ("A", "B")
@@ -294,7 +294,7 @@ def test_loh_covers_full_chromosome():
     """LOH segments should cover 1 to length with no gaps."""
     random.seed(5)
     genome = {"A": _simple_chrom("A"), "B": _simple_chrom("B")}
-    final = run_simulation(genome, n_gen=10)
+    final, _, _ = run_simulation(genome, n_gen=10)
     loh = compute_loh(final)
     assert loh[0][0] == 1
     assert loh[-1][1] == 500000
@@ -304,7 +304,7 @@ def test_loh_covers_full_chromosome():
 def test_loh_values_valid():
     random.seed(13)
     genome = {"A": _simple_chrom("A"), "B": _simple_chrom("B")}
-    final = run_simulation(genome, n_gen=15)
+    final, _, _ = run_simulation(genome, n_gen=15)
     for _, _, val in compute_loh(final):
         assert val in ("A", "B", "het")
 
@@ -540,7 +540,7 @@ def test_classify_event_types_valid():
     """All event types and fields from a full simulation must be valid."""
     random.seed(77)
     genome = {"A": _simple_chrom("A"), "B": _simple_chrom("B")}
-    final = run_simulation(genome, n_gen=20)
+    final, _, _ = run_simulation(genome, n_gen=20)
     valid_types = {"GC-NCO", "GC-CO", "CO-terminal"}
     for e in classify_events(final):
         assert e["type"] in valid_types
@@ -767,7 +767,7 @@ def test_co_prob_zero_produces_no_crossovers():
     from a GC-CO by post-hoc analysis — but no terminal LOH should result."""
     random.seed(99)
     genome = {"A": _simple_chrom("A"), "B": _simple_chrom("B")}
-    final = run_simulation(genome, n_gen=20, co_prob=0.0)
+    final, _, _ = run_simulation(genome, n_gen=20, co_prob=0.0)
     from simRec import classify_events
     events = classify_events(final)
     co_term = [e for e in events if e["type"] == "CO-terminal"]
@@ -782,7 +782,7 @@ def test_co_prob_one_produces_no_nco():
     should be absent when all events are crossovers."""
     random.seed(12)
     genome = {"A": _simple_chrom("A"), "B": _simple_chrom("B")}
-    final = run_simulation(genome, n_gen=10, co_prob=1.0)
+    final, _, _ = run_simulation(genome, n_gen=10, co_prob=1.0)
     from simRec import classify_events
     events = classify_events(final)
     # With all COs there should be terminal LOH
@@ -797,11 +797,11 @@ def test_co_prob_default_unchanged():
     """Default co_prob=0.5 should reproduce the same result as before."""
     random.seed(42)
     genome = {"A": _simple_chrom("A"), "B": _simple_chrom("B")}
-    result_default = run_simulation(genome, n_gen=5)
+    result_default, _, _ = run_simulation(genome, n_gen=5)
 
     random.seed(42)
     genome = {"A": _simple_chrom("A"), "B": _simple_chrom("B")}
-    result_explicit = run_simulation(genome, n_gen=5, co_prob=0.5)
+    result_explicit, _, _ = run_simulation(genome, n_gen=5, co_prob=0.5)
 
     assert result_default["A"]["haplotype"] == result_explicit["A"]["haplotype"]
     assert result_default["B"]["haplotype"] == result_explicit["B"]["haplotype"]

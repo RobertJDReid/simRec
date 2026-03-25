@@ -8,6 +8,7 @@ output: html_document
 ```{r setup, include=FALSE}
 library(tidyverse)
 knitr::opts_chunk$set(echo = TRUE)
+theme_set(theme_bw())
 ```
 
 ## WT cells
@@ -18,19 +19,45 @@ Recombination was simulated with functions in `simRec.py` and
 multiple cells were simulated using `simRec_batch.py`.
 The lower limit of basal recombination rate for unperturbed growth
 from Sui and Petes of 3.7e-10 per generation per basepair was
-used for simulation of 83 cells at 3000 generations per batch.
+used for simulation of 88 cells at 3000 generations per batch.
+100 simulations were performed.
 Accumulated data will be loaded and plotted.
 
 #### Load data
 
 ```{r load data, echo=FALSE, message=FALSE, warning=FALSE}
-f = list.files("test_batches/",pattern = "*.tsv",full.names = TRUE)
+f = list.files("test_batch_5e10/",pattern = "*.tsv",full.names = TRUE)
 bd = map(f,function(f){
   fc = read_delim(f)
   fct = table(fc$event)
   return(fct)
 }) |>
-  bind_rows()
+  bind_rows() |>
+  mutate(ILOH = `GC-CO` + `GC-NCO`) |>
+  rename(TLOH = `CO-terminal`)
 
+bdl = bd |>
+  pivot_longer(cols = everything(),names_to = "event",values_to = "count")
+
+```
+
+Plot
+
+```{r}
+bdl |>
+  filter(event %in% c("ILOH","TLOH")) |>
+  ggplot(aes(x=event,y=count)) +
+  geom_boxplot() +
+  geom_point(position = position_jitter(width = 0.15))
+```
+
+Summary
+
+```{r}
+bdl |>
+  group_by(event) |>
+  summarise(
+    median = median(count,na.rm = TRUE)
+  )
 ```
 

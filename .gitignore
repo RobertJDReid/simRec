@@ -1,6 +1,8 @@
 *.DS_store
+*.Rhistory
 archive
 __pycache__/
 *.pyc
 test_batches/
 test_batch_5e10/
+Sui_data/

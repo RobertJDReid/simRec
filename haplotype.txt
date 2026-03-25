@@ -1,0 +1,22 @@
+Generation 9  Chr II
+  Homolog A:
+           1 –   814434  [A]
+  Homolog B:
+           1 –   814434  [B]
+
+Generation 11  Chr II
+  Homolog A:
+           1 –   364117  [A]
+      364118 –   446174  [B]
+      446175 –   814434  [A]
+  Homolog B:
+           1 –   814434  [B]
+
+Generation 20  Chr II
+  Homolog A:
+           1 –   364117  [A]
+      364118 –   446174  [B]
+      446175 –   814434  [A]
+  Homolog B:
+           1 –   814434  [B]
+
