@@ -175,7 +175,7 @@ The `--plot` / `--plot-out` flags produce a two-panel figure:
 - **Top panel — Haplotype map:** one bar per homolog (A and B), colored by parental identity at each position. The centromere is marked with a vertical black tick.
 - **Bottom panel — LOH map:** a single bar showing genomic intervals that are homozygous (LOH-A in blue, LOH-B in red) or heterozygous (light grey).
 
-![Example plot](example_plot.png)
+![Example plot](images/example_plot.png)
 
 ---
 
