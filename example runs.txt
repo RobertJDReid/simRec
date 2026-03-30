@@ -1,3 +1,0 @@
-python simRec.py genome_chrII.csv --n-gen 20 --p-rec 3e-7 --seed 10 --plot  # 2X TCO
-python simRec.py genome_chrII.csv --n-gen 20 --p-rec 3e-7 --seed 23 --plot  # weird one with internal LOH from 2X TCO
-python simRec.py genome_chrII.csv --n-gen 20 --p-rec 3e-7 --seed 24 --plot  # 2X TCO + GC

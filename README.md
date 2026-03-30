@@ -29,10 +29,10 @@ simRec simulates mitotic recombination and LOH in a diploid yeast chromosome acr
 - Size-aware classification: blocks exceeding `--gc-max` classified as DCO or flagged complex
 - Terminal cluster heuristic reclassification via `reclassify_terminal_clusters`
 - Adjacent-to-terminal flagging for LOH clusters near telomeres
-- Ground-truth event logging (`--observed-out`) with per-generation haplotype snapshots
+- Logged event output (`--logged`, `--logged-out`) with per-generation haplotype snapshots
 - Combined haplotype + LOH visualization
-- Tab-separated inferred event output for scripting (`--inferred`, `--inferred-out`) and ground-truth output (`--observed`, `--observed-out`)
-- Batch runner (`simRec_batch.py`) for large-scale multi-cell simulations with separate inferred and ground-truth outputs
+- Tab-separated observed event output for scripting (`--observed`, `--observed-out`)
+- Batch runner (`simRec_batch.py`) for large-scale multi-cell simulations with separate observed and logged outputs
 - Reproducible runs via random seed
 - Dependencies beyond the standard library: `matplotlib`, `tqdm` (batch runner only)
 
@@ -93,10 +93,10 @@ python simRec.py genome_chrI.csv [options]
 | `--seed` | int | `None` | Random seed for reproducibility |
 | `--plot` | flag | off | Display combined haplotype + LOH plot interactively |
 | `--plot-out` | str | `None` | Save plot to file (PNG or PDF) instead of displaying |
-| `--inferred` | flag | off | Print post-hoc classified events (inferred from the final LOH map) to stdout as a tab-separated table with header |
-| `--inferred-out` | str | `None` | Write post-hoc classified events to FILE instead of stdout |
-| `--observed` | flag | off | Print ground-truth recombination events (tracked as the simulation runs) to stdout as a tab-separated table with header |
-| `--observed-out` | str | `None` | Write ground-truth recombination events to FILE; also writes `haplotype.txt` alongside |
+| `--observed` | flag | off | Print post-hoc classified events (observed from the final LOH map) to stdout as a tab-separated table with header |
+| `--observed-out` | str | `None` | Write post-hoc classified events to FILE instead of stdout |
+| `--logged` | flag | off | Print logged recombination events (tracked as the simulation runs) to stdout as a tab-separated table with header |
+| `--logged-out` | str | `None` | Write logged recombination events to FILE; also writes `haplotype.txt` alongside |
 | `--version` | flag | — | Print version and exit |
 
 ### Examples
@@ -116,42 +116,42 @@ python simRec.py genome_chrI.csv --n-gen 20 --p-rec 1e-4 --seed 42 --plot-out re
 Print classified events to stdout:
 
 ```bash
-python simRec.py genome_chrI.csv --n-gen 20 --p-rec 1e-5 --inferred
+python simRec.py genome_chrI.csv --n-gen 20 --p-rec 1e-5 --observed
 ```
 
-Write inferred events to a file:
+Write observed events to a file:
 
 ```bash
-python simRec.py genome_chrI.csv --n-gen 20 --p-rec 1e-5 --inferred-out results.tsv
+python simRec.py genome_chrI.csv --n-gen 20 --p-rec 1e-5 --observed-out results.tsv
 ```
 
 Accumulate multiple runs into a single file by piping with header suppressed:
 
 ```bash
 # First run — with header
-python simRec.py genome_chrI.csv --n-gen 20 --p-rec 1e-5 --inferred > results.tsv
+python simRec.py genome_chrI.csv --n-gen 20 --p-rec 1e-5 --observed > results.tsv
 
-# Subsequent runs — pipe without header using tail
+# Subsequent runs — append without header
 for i in $(seq 2 100); do
-    python simRec.py genome_chrI.csv --n-gen 20 --p-rec 1e-5 --inferred | tail -n +2 >> results.tsv
+    python simRec.py genome_chrI.csv --n-gen 20 --p-rec 1e-5 --observed | tail -n +2 >> results.tsv
 done
 ```
 
-Print ground-truth events alongside inferred events in one run:
+Print logged events alongside observed events in one run:
 
 ```bash
-python simRec.py genome_chrI.csv --n-gen 20 --p-rec 1e-5 --inferred --observed
+python simRec.py genome_chrI.csv --n-gen 20 --p-rec 1e-5 --observed --logged
 ```
 
 Write both to separate files in one run:
 
 ```bash
 python simRec.py genome_chrI.csv --n-gen 20 --p-rec 1e-5 \
-    --inferred-out inferred.tsv \
-    --observed-out observed.csv
+    --observed-out observed.tsv \
+    --logged-out logged.csv
 ```
 
-`--inferred`, `--inferred-out`, `--observed`, `--observed-out`, and `--plot` are all independent and can be combined freely in a single run.
+`--observed`, `--observed-out`, `--logged`, `--logged-out`, and `--plot` are all independent and can be combined freely in a single run.
 
 ### Example output
 
@@ -372,8 +372,8 @@ pytest test_simRec.py -v
 
 Two kinds of output can be produced in the same run:
 
-- **Inferred events** (`--inferred-out`) — post-hoc LOH classification of the final haplotype state, identical in format and interpretation to `--inferred` / `--inferred-out` in `simRec.py`, with an additional `cell` column.
-- **Observed events** (`--observed-out`) — ground-truth recombination events captured as the simulation runs, identical in content to the `event_log` returned by `run_simulation()`, with an additional `cell` column. This is the mechanistic record of what actually happened, independent of what is detectable from the LOH map.
+- **Observed events** (`--observed-out`) — post-hoc LOH classification of the final haplotype state, identical in format and interpretation to `--observed` / `--observed-out` in `simRec.py`, with an additional `cell` column.
+- **Logged events** (`--logged-out`) — recombination events captured as the simulation runs, identical in content to the `event_log` returned by `run_simulation()`, with an additional `cell` column. This is the mechanistic record of what actually happened, independent of what is detectable from the LOH map.
 
 ### Command line
 
@@ -391,13 +391,13 @@ python simRec_batch.py genome_chrII.csv [options]
 | `--gc-max` | int | `5000` | Maximum GC tract size (bp) |
 | `--co-nco` | float | `0.5` | Crossover probability per recombination event |
 | `--seed` | int | `None` | Master random seed; per-cell seeds are derived deterministically from this |
-| `--inferred-out` | str | stdout | Write post-hoc classified events (inferred from the final LOH map) to FILE. If omitted, writes to stdout and suppresses the progress bar |
-| `--observed-out` | str | `None` | Write ground-truth recombination events to FILE. Omitting this flag disables ground-truth output entirely |
+| `--observed-out` | str | stdout | Write post-hoc classified events (observed from the final LOH map) to FILE. If omitted, writes to stdout and suppresses the progress bar |
+| `--logged-out` | str | `None` | Write logged recombination events to FILE. Omitting this flag disables logged output entirely |
 | `--version` | flag | — | Print version and exit |
 
 ### Output formats
 
-**Inferred events** (`--inferred-out` or stdout) — tab-separated with header:
+**Observed events** (`--observed-out` or stdout) — tab-separated with header:
 
 | Column | Description |
 |---|---|
@@ -413,7 +413,7 @@ python simRec_batch.py genome_chrII.csv [options]
 | `reclassified` | `True` if the terminal cluster heuristic modified this record |
 | `complex` | `True` if the block could not be cleanly resolved |
 
-**Observed events** (`--observed-out`) — tab-separated with header:
+**Logged events** (`--logged-out`) — tab-separated with header:
 
 | Column | Description |
 |---|---|
@@ -424,33 +424,33 @@ python simRec_batch.py genome_chrII.csv [options]
 | `start` | GC tract start position (bp) |
 | `end` | GC tract end position (bp) |
 
-Note that `--observed-out` does not produce the `haplotype.txt` sidecar that `--observed-out` writes in `simRec.py`. Per-generation haplotype snapshots are not practical to aggregate across thousands of cells.
+Note that `--logged-out` does not produce the `haplotype.txt` sidecar that `--logged-out` writes in `simRec.py`. Per-generation haplotype snapshots are not practical to aggregate across thousands of cells.
 
 ### Examples
 
-Write inferred events to file (enables progress bar on stderr):
+Write observed events to file (enables progress bar on stderr):
 
 ```bash
 python simRec_batch.py genome_chrII.csv --n-cells 10000 --n-gen 5000 --seed 1 \
-    --inferred-out batch_inferred.tsv
-```
-
-Write both inferred and ground-truth events in one run:
-
-```bash
-python simRec_batch.py genome_chrII.csv --n-cells 10000 --n-gen 5000 --seed 1 \
-    --inferred-out batch_inferred.tsv \
     --observed-out batch_observed.tsv
 ```
 
-Write only ground-truth events (discard inferred output):
+Write both observed and logged events in one run:
+
+```bash
+python simRec_batch.py genome_chrII.csv --n-cells 10000 --n-gen 5000 --seed 1 \
+    --observed-out batch_observed.tsv \
+    --logged-out batch_logged.tsv
+```
+
+Write only logged events (discard observed output):
 
 ```bash
 python simRec_batch.py genome_chrII.csv --n-cells 1000 --n-gen 5000 \
-    --observed-out batch_observed.tsv > /dev/null
+    --logged-out batch_logged.tsv > /dev/null
 ```
 
-Pipe inferred output directly into a downstream script:
+Pipe observed output directly into a downstream script:
 
 ```bash
 python simRec_batch.py genome_chrII.csv --n-cells 1000 --n-gen 5000 | Rscript analyze.R

@@ -25,7 +25,7 @@ Usage
     python simRec_batch.py genome_chrII.csv --n-cells 1000 --n-gen 5000
 
     # Write to file:
-    python simRec_batch.py genome_chrII.csv --n-cells 1000 --n-gen 5000 --inferred-out results.tsv
+    python simRec_batch.py genome_chrII.csv --n-cells 1000 --n-gen 5000 --observed-out results.tsv
 
     # Pipe into another script:
     python simRec_batch.py genome_chrII.csv --n-cells 500 --n-gen 5000 | downstream.py
@@ -164,11 +164,11 @@ def main():
                         help="Crossover probability per recombination event")
     parser.add_argument("--seed",    type=int, default=None,
                         help="Master random seed for reproducibility")
-    parser.add_argument("--inferred-out", type=str, default=None, dest="inferred_out",
-                        help="Output file for post-hoc classified events (inferred from the final "
-                             "LOH map). If not given, writes to stdout.")
     parser.add_argument("--observed-out", type=str, default=None, dest="observed_out",
-                        help="Output file for ground-truth recombination events tracked as the "
+                        help="Output file for post-hoc classified events (observed from the final "
+                             "LOH map). If not given, writes to stdout.")
+    parser.add_argument("--logged-out", type=str, default=None, dest="logged_out",
+                        help="Output file for logged recombination events tracked as the "
                              "simulation runs. Written as TSV with a 'cell' column. "
                              "Columns: cell, gen, chrom, type, start, end")
     args = parser.parse_args()
@@ -176,16 +176,16 @@ def main():
     # -----------------------------------------------------------------------
     # Set up output streams
     # -----------------------------------------------------------------------
-    if args.inferred_out:
-        inferred_fh = open(args.inferred_out, "w")
-    else:
-        inferred_fh = sys.stdout
-
     if args.observed_out:
         observed_fh = open(args.observed_out, "w")
-        observed_fh.write("\t".join(("cell", "gen", "chrom", "type", "start", "end")) + "\n")
     else:
-        observed_fh = None
+        observed_fh = sys.stdout
+
+    if args.logged_out:
+        logged_fh = open(args.logged_out, "w")
+        logged_fh.write("\t".join(("cell", "gen", "chrom", "type", "start", "end")) + "\n")
+    else:
+        logged_fh = None
 
     # -----------------------------------------------------------------------
     # Master seed → per-cell seeds
@@ -208,7 +208,7 @@ def main():
     header = ("cell", "time", "event", "start", "end",
               "haplotype", "left", "right", "adjacent_to_terminal",
               "reclassified", "complex")
-    inferred_fh.write("\t".join(header) + "\n")
+    observed_fh.write("\t".join(header) + "\n")
 
     desc = f"simRec_batch  chr={chrom_name}  L={chrom_length:,}  " \
            f"n_gen={args.n_gen:,}  p_rec={args.p_rec:.2e}"
@@ -216,9 +216,9 @@ def main():
     try:
         with tqdm(total=args.n_cells, desc=desc, file=sys.stderr,
                   unit="cell", dynamic_ncols=True,
-                  disable=args.inferred_out is None) as pbar:
+                  disable=args.observed_out is None) as pbar:
             for cell_id in range(1, args.n_cells + 1):
-                rows, obs_rows = run_one_cell(
+                rows, log_rows = run_one_cell(
                     cell_id  = cell_id,
                     genome   = genome,
                     n_gen    = args.n_gen,
@@ -228,16 +228,16 @@ def main():
                     seed     = cell_seeds[cell_id - 1],
                 )
                 for row in rows:
-                    inferred_fh.write(row[0] + "\t" + timestamp + "\t" + "\t".join(row[1:]) + "\n")
-                if observed_fh is not None:
-                    for obs_row in obs_rows:
-                        observed_fh.write("\t".join(obs_row) + "\n")
+                    observed_fh.write(row[0] + "\t" + timestamp + "\t" + "\t".join(row[1:]) + "\n")
+                if logged_fh is not None:
+                    for log_row in log_rows:
+                        logged_fh.write("\t".join(log_row) + "\n")
                 pbar.update(1)
     finally:
-        if args.inferred_out:
-            inferred_fh.close()
-        if observed_fh is not None:
+        if args.observed_out:
             observed_fh.close()
+        if logged_fh is not None:
+            logged_fh.close()
 
 
 if __name__ == "__main__":

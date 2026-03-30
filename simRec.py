@@ -1132,18 +1132,18 @@ if __name__ == "__main__":
     parser.add_argument("--plot", action="store_true", help="Plot final haplotype and LOH state")
     parser.add_argument("--plot-out", type=str, default=None,
                         help="Save plot to this path (e.g. out.png) instead of displaying interactively")
-    parser.add_argument("--inferred", action="store_true",
-                        help="Print post-hoc classified events (inferred from the final LOH map) "
-                             "to stdout as a tab-separated table with header")
-    parser.add_argument("--inferred-out", type=str, default=None, dest="inferred_out",
-                        metavar="FILE",
-                        help="Write post-hoc classified events to FILE instead of stdout")
     parser.add_argument("--observed", action="store_true",
-                        help="Print ground-truth recombination events (tracked as the simulation "
-                             "runs) to stdout as a tab-separated table with header")
+                        help="Print post-hoc classified events (observed from the final LOH map) "
+                             "to stdout as a tab-separated table with header")
     parser.add_argument("--observed-out", type=str, default=None, dest="observed_out",
                         metavar="FILE",
-                        help="Write ground-truth recombination events to FILE; also writes "
+                        help="Write post-hoc classified events to FILE instead of stdout")
+    parser.add_argument("--logged", action="store_true",
+                        help="Print logged recombination events (tracked as the simulation "
+                             "runs) to stdout as a tab-separated table with header")
+    parser.add_argument("--logged-out", type=str, default=None, dest="logged_out",
+                        metavar="FILE",
+                        help="Write logged recombination events to FILE; also writes "
                              "haplotype.txt alongside. Columns: gen, chrom, type, start, end")
     args = parser.parse_args()
 
@@ -1153,7 +1153,7 @@ if __name__ == "__main__":
     genome = load_genome(args.genome_file, p_rec_default=args.p_rec)
 
     def _write_event_log(event_log, path):
-        """Write the ground-truth event log to a CSV file."""
+        """Write the logged event log to a CSV file."""
         with open(path, "w") as fh:
             fh.write("gen,chrom,type,start,end\n")
             for e in event_log:
@@ -1178,40 +1178,40 @@ if __name__ == "__main__":
                         fh.write(f"    {seg_start:>8} – {seg_end:>8}  [{hap}]\n")
                 fh.write("\n")
 
-    def _format_observed_row(e):
+    def _format_logged_row(e):
         return "\t".join((
             str(e["gen"]), e["chrom"], e["type"],
             str(e["start"]), str(e["end"]),
         ))
 
     # Run simulation whenever any output mode is active, or in default verbose mode
-    wants_inferred = args.inferred or args.inferred_out
     wants_observed = args.observed or args.observed_out
+    wants_logged   = args.logged   or args.logged_out
 
     final_cell, event_log, haplotype_snapshots = run_simulation(
         genome, n_gen=args.n_gen, gc_min=args.gc_min,
         gc_max=args.gc_max, co_prob=args.co_prob)
 
-    # --observed / --observed-out
-    if args.observed:
-        obs_cols = ("gen", "chrom", "type", "start", "end")
-        print("\t".join(obs_cols))
+    # --logged / --logged-out
+    if args.logged:
+        log_cols = ("gen", "chrom", "type", "start", "end")
+        print("\t".join(log_cols))
         for e in event_log:
-            print(_format_observed_row(e))
+            print(_format_logged_row(e))
 
-    if args.observed_out is not None:
-        _write_event_log(event_log, args.observed_out)
-        _write_haplotype_map(haplotype_snapshots, args.observed_out)
+    if args.logged_out is not None:
+        _write_event_log(event_log, args.logged_out)
+        _write_haplotype_map(haplotype_snapshots, args.logged_out)
 
-    # --inferred / --inferred-out
-    if wants_inferred:
+    # --observed / --observed-out
+    if wants_observed:
         events    = classify_events(final_cell, gc_max=args.gc_max)
         reclass   = reclassify_terminal_clusters(events, gc_max=args.gc_max)
         timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-        inf_cols  = ("time", "event", "start", "end", "haplotype", "left", "right",
+        obs_cols  = ("time", "event", "start", "end", "haplotype", "left", "right",
                      "adjacent_to_terminal", "reclassified", "complex")
 
-        def _format_inferred_row(e):
+        def _format_observed_row(e):
             return "\t".join((
                 timestamp,
                 e["type"],
@@ -1225,19 +1225,19 @@ if __name__ == "__main__":
                 str(e.get("complex", False)),
             ))
 
-        if args.inferred:
-            print("\t".join(inf_cols))
+        if args.observed:
+            print("\t".join(obs_cols))
             for e in reclass:
-                print(_format_inferred_row(e))
+                print(_format_observed_row(e))
 
-        if args.inferred_out is not None:
-            with open(args.inferred_out, "w") as fh:
-                fh.write("\t".join(inf_cols) + "\n")
+        if args.observed_out is not None:
+            with open(args.observed_out, "w") as fh:
+                fh.write("\t".join(obs_cols) + "\n")
                 for e in reclass:
-                    fh.write(_format_inferred_row(e) + "\n")
+                    fh.write(_format_observed_row(e) + "\n")
 
     # Default verbose mode — only when no TSV output flags are given
-    if not wants_inferred and not wants_observed:
+    if not wants_observed and not wants_logged:
         print(f"Loaded chromosome '{genome['A']['name']}', length {genome['A']['length']} bp")
         print(f"Running {args.n_gen} generation(s)...")
 
