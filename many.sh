@@ -1,20 +1,20 @@
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --p-rec 5e-10 --co-nco 0.2 --out test_batch_5e10/set00.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --p-rec 5e-10 --co-nco 0.2 --out test_batch_5e10/set01.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --p-rec 5e-10 --co-nco 0.2 --out test_batch_5e10/set02.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --p-rec 5e-10 --co-nco 0.2 --out test_batch_5e10/set03.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --p-rec 5e-10 --co-nco 0.2 --out test_batch_5e10/set04.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --p-rec 5e-10 --co-nco 0.2 --out test_batch_5e10/set05.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --p-rec 5e-10 --co-nco 0.2 --out test_batch_5e10/set06.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --p-rec 5e-10 --co-nco 0.2 --out test_batch_5e10/set07.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --p-rec 5e-10 --co-nco 0.2 --out test_batch_5e10/set08.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --p-rec 5e-10 --co-nco 0.2 --out test_batch_5e10/set09.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --p-rec 5e-10 --co-nco 0.2 --out test_batch_5e10/set10.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --p-rec 5e-10 --co-nco 0.2 --out test_batch_5e10/set11.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --p-rec 5e-10 --co-nco 0.2 --out test_batch_5e10/set12.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --p-rec 5e-10 --co-nco 0.2 --out test_batch_5e10/set13.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --p-rec 5e-10 --co-nco 0.2 --out test_batch_5e10/set14.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --p-rec 5e-10 --co-nco 0.2 --out test_batch_5e10/set15.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --p-rec 5e-10 --co-nco 0.2 --out test_batch_5e10/set16.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --p-rec 5e-10 --co-nco 0.2 --out test_batch_5e10/set17.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --p-rec 5e-10 --co-nco 0.2 --out test_batch_5e10/set18.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --p-rec 5e-10 --co-nco 0.2 --out test_batch_5e10/set19.tsv
+python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set00.tsv
+python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set01.tsv
+python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set02.tsv
+python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set03.tsv
+python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set04.tsv
+python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set05.tsv
+python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set06.tsv
+python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set07.tsv
+python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set08.tsv
+python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set09.tsv
+python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set10.tsv
+python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set11.tsv
+python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set12.tsv
+python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set13.tsv
+python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set14.tsv
+python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set15.tsv
+python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set16.tsv
+python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set17.tsv
+python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set18.tsv
+python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set19.tsv

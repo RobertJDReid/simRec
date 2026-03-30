@@ -336,7 +336,7 @@ def test_classify_no_events():
 
 def test_classify_gc_nco_internal():
     """
-    GC-NCO: internal LOH block, homolog A identity same on both sides.
+    NCO-GC: internal LOH block, homolog A identity same on both sides.
     Homolog A: A(1-199999) | B(200000-201000) | A(201001-500000)
     Homolog B: all B
     LOH: het | B(200000-201000) | het
@@ -349,7 +349,7 @@ def test_classify_gc_nco_internal():
     events = classify_events(cell)
     assert len(events) == 1
     e = events[0]
-    assert e["type"]               == "GC-NCO"
+    assert e["type"]               == "NCO-GC"
     assert e["start"]              == 200000
     assert e["end"]                == 201000
     assert e["haplotype"]          == "B"
@@ -359,7 +359,7 @@ def test_classify_gc_nco_internal():
 
 def test_classify_gc_co_phase_switch():
     """
-    GC-CO via phase switch: homolog A identity differs on each side of block.
+    CO-GC via phase switch: homolog A identity differs on each side of block.
     Homolog A: B(1-24585) | A(24586-29152) | A(29153-500000)
                = B(1-24585) | A(24586-500000)
     Homolog B: A(1-24585) | B(24586-500000)
@@ -370,7 +370,7 @@ def test_classify_gc_co_phase_switch():
     Homolog B: A(1-24585) | B(24586-500000)
     LOH: het(1-24585) | B(24586-29152) | het(29153-500000)
     LOH block B(24586-29152):
-      hom A at pos 24585 = B, hom A at pos 29153 = A  -> phase switches -> GC-CO
+      hom A at pos 24585 = B, hom A at pos 29153 = A  -> phase switches -> CO-GC
     """
     hap_A = [(1, 29152, "B"), (29153, 500000, "A")]
     hap_B = [(1, 24585, "A"), (24586, 500000, "B")]
@@ -378,7 +378,7 @@ def test_classify_gc_co_phase_switch():
     events = classify_events(cell)
     assert len(events) == 1
     e = events[0]
-    assert e["type"]      == "GC-CO"
+    assert e["type"]      == "CO-GC"
     assert e["start"]     == 24586
     assert e["end"]       == 29152
     assert e["haplotype"] == "B"
@@ -388,7 +388,7 @@ def test_classify_gc_co_phase_switch():
 
 def test_classify_gc_nco_no_phase_switch():
     """
-    GC-NCO: hom A same identity on both sides even though LOH block is
+    NCO-GC: hom A same identity on both sides even though LOH block is
     flanked by het in opposite phase. Confirms phase-aware test is correct.
     Homolog A: A(1-200000) | B(200001-201000) | A(201001-500000)
     Homolog B: B(1-200000) | B(200001-201000) | B(201001-500000) = all B
@@ -400,7 +400,7 @@ def test_classify_gc_nco_no_phase_switch():
     cell = _make_cell_from_haplotypes(hap_A, hap_B)
     events = classify_events(cell)
     assert len(events) == 1
-    assert events[0]["type"] == "GC-NCO"
+    assert events[0]["type"] == "NCO-GC"
 
 def test_classify_co_terminal_right():
     """Terminal LOH on the right arm."""
@@ -477,7 +477,7 @@ def test_classify_adjacent_to_terminal_flag():
     hap_B = [(1, 349999, "B"), (350000, 500000, "A")]
     cell = _make_cell_from_haplotypes(hap_A, hap_B)
     events = classify_events(cell)
-    gc_nco  = [e for e in events if e["type"] == "GC-NCO"]
+    gc_nco  = [e for e in events if e["type"] == "NCO-GC"]
     co_term = [e for e in events if e["type"] == "CO-terminal"]
     assert len(gc_nco)  == 1
     assert len(co_term) == 1
@@ -489,7 +489,7 @@ def test_classify_adjacent_to_terminal_flag():
 
 def test_classify_not_adjacent_to_terminal():
     """
-    GC-NCO block that is NOT near any terminal LOH — adjacent_to_terminal False.
+    NCO-GC block that is NOT near any terminal LOH — adjacent_to_terminal False.
     """
     hap_A = replace_interval([(1, 500000, "A")], 200000, 201000, "B")
     hap_B = [(1, 500000, "B")]
@@ -527,7 +527,7 @@ def test_classify_abutting_terminal_same_arm():
     cell = _make_cell_from_haplotypes(hap_A, hap_B)
     events = classify_events(cell)
     co_term = [e for e in events if e["type"] == "CO-terminal"]
-    gc_nco  = [e for e in events if e["type"] == "GC-NCO"]
+    gc_nco  = [e for e in events if e["type"] == "NCO-GC"]
     assert len(co_term) == 1
     assert co_term[0]["start"] == 350001
     assert co_term[0]["end"]   == 500000
@@ -541,7 +541,7 @@ def test_classify_event_types_valid():
     random.seed(77)
     genome = {"A": _simple_chrom("A"), "B": _simple_chrom("B")}
     final, _, _ = run_simulation(genome, n_gen=20)
-    valid_types = {"GC-NCO", "GC-CO", "CO-terminal"}
+    valid_types = {"NCO-GC", "CO-GC", "CO-terminal"}
     for e in classify_events(final):
         assert e["type"] in valid_types
         assert e["start"] <= e["end"]
@@ -558,10 +558,10 @@ def test_classify_no_events():
 def test_classify_gc_nco_internal():
     """
     Internal LOH block flanked by het on both sides, same haplotype context
-    outside — GC-NCO.
+    outside — NCO-GC.
     Homolog A: all A except 200000-201000 converted to B.
     Homolog B: all B.
-    LOH: het | B(200000-201000) | het  -> GC-NCO
+    LOH: het | B(200000-201000) | het  -> NCO-GC
     """
     cell = _make_cell_from_haplotypes(
         replace_interval([(1, 500000, "A")], 200000, 201000, "B"),
@@ -570,7 +570,7 @@ def test_classify_gc_nco_internal():
     events = classify_events(cell)
     assert len(events) == 1
     e = events[0]
-    assert e["type"]      == "GC-NCO"
+    assert e["type"]      == "NCO-GC"
     assert e["start"]     == 200000
     assert e["end"]       == 201000
     assert e["haplotype"] == "B"
@@ -735,7 +735,7 @@ def test_classify_abutting_terminal_same_arm():
       Homolog B: B(1-200000) | B(200001-350000) | A(350001-500000) = B(1-350000)|A(350001+)
 
     LOH: het(1-200000) | B(200001-350000) | A(350001-500000)
-    B(200001-350000): hom A = A on both sides -> GC-NCO; adjacent to terminal A block.
+    B(200001-350000): hom A = A on both sides -> NCO-GC; adjacent to terminal A block.
     A(350001-500000): touches right telomere -> CO-terminal
     """
     hap_A = [(1, 200000, "A"), (200001, 350000, "B"), (350001, 500000, "A")]
@@ -743,7 +743,7 @@ def test_classify_abutting_terminal_same_arm():
     cell = _make_cell_from_haplotypes(hap_A, hap_B)
     events = classify_events(cell)
     co_term = [e for e in events if e["type"] == "CO-terminal"]
-    gc_nco  = [e for e in events if e["type"] == "GC-NCO"]
+    gc_nco  = [e for e in events if e["type"] == "NCO-GC"]
     assert len(co_term) == 1
     assert co_term[0]["start"]          == 350001
     assert co_term[0]["end"]            == 500000
@@ -762,9 +762,9 @@ def test_classify_abutting_terminal_same_arm():
 def test_co_prob_zero_produces_no_crossovers():
     """With co_prob=0.0, no mechanical crossovers fire.
     CO-terminal events (which require a mechanical crossover) should be absent.
-    GC-CO calls from the classifier may still appear because with symmetric
+    CO-GC calls from the classifier may still appear because with symmetric
     initiation, a B-initiated GC into A creates a phase switch indistinguishable
-    from a GC-CO by post-hoc analysis — but no terminal LOH should result."""
+    from a CO-GC by post-hoc analysis — but no terminal LOH should result."""
     random.seed(99)
     genome = {"A": _simple_chrom("A"), "B": _simple_chrom("B")}
     final, _, _ = run_simulation(genome, n_gen=20, co_prob=0.0)
@@ -775,10 +775,10 @@ def test_co_prob_zero_produces_no_crossovers():
 
 def test_co_prob_one_produces_no_nco():
     """With co_prob=1.0, every recombination event is a crossover.
-    The classifier may still call GC-NCO on some blocks due to haplotype
+    The classifier may still call NCO-GC on some blocks due to haplotype
     context, but there should be CO-terminal events present, and no
-    GC-CO events (since phase-switch detection classifies those separately).
-    More importantly, isolated GC-NCO blocks (adjacent_to_terminal=False)
+    CO-GC events (since phase-switch detection classifies those separately).
+    More importantly, isolated NCO-GC blocks (adjacent_to_terminal=False)
     should be absent when all events are crossovers."""
     random.seed(12)
     genome = {"A": _simple_chrom("A"), "B": _simple_chrom("B")}
@@ -788,9 +788,9 @@ def test_co_prob_one_produces_no_nco():
     # With all COs there should be terminal LOH
     co_term = [e for e in events if e["type"] == "CO-terminal"]
     assert len(co_term) > 0, "Expected at least one CO-terminal event with co_prob=1"
-    # Any GC-NCO blocks present should be part of a terminal cluster
+    # Any NCO-GC blocks present should be part of a terminal cluster
     isolated_nco = [e for e in events
-                    if e["type"] == "GC-NCO" and not e["adjacent_to_terminal"]]
+                    if e["type"] == "NCO-GC" and not e["adjacent_to_terminal"]]
     assert len(isolated_nco) == 0, f"Unexpected isolated NCO events: {isolated_nco}"
 
 def test_co_prob_default_unchanged():
@@ -805,3 +805,53 @@ def test_co_prob_default_unchanged():
 
     assert result_default["A"]["haplotype"] == result_explicit["A"]["haplotype"]
     assert result_default["B"]["haplotype"] == result_explicit["B"]["haplotype"]
+
+
+def test_co_prob_zero_event_log():
+    """co_prob=0.0: event log should contain zero CO entries."""
+    random.seed(5)
+    genome = {"A": _simple_chrom("A"), "B": _simple_chrom("B")}
+    # Use elevated p_rec to generate plenty of events
+    for chrom in ("A", "B"):
+        genome[chrom]["p_rec"] = [(1, 500000, 1e-4)]
+    _, event_log, _ = run_simulation(genome, n_gen=20, co_prob=0.0)
+    co_count = sum(1 for e in event_log if e["type"] == "CO")
+    assert co_count == 0, f"Expected 0 CO events with co_prob=0.0, got {co_count}"
+    assert len(event_log) > 0, "Expected at least some GC events to verify the test ran"
+
+
+def test_co_prob_one_event_log():
+    """co_prob=1.0: event log should contain zero GC-only entries."""
+    random.seed(5)
+    genome = {"A": _simple_chrom("A"), "B": _simple_chrom("B")}
+    for chrom in ("A", "B"):
+        genome[chrom]["p_rec"] = [(1, 500000, 1e-4)]
+    _, event_log, _ = run_simulation(genome, n_gen=20, co_prob=1.0)
+    gc_only = sum(1 for e in event_log if e["type"] == "GC")
+    assert gc_only == 0, f"Expected 0 GC-only events with co_prob=1.0, got {gc_only}"
+    assert len(event_log) > 0, "Expected at least some CO events to verify the test ran"
+
+
+def test_co_prob_fraction_in_range():
+    """
+    co_prob=0.25: the fraction of CO events in the mechanical log should be
+    statistically consistent with 0.25. With many events, the observed fraction
+    should fall within 3 standard deviations of the expected value.
+    """
+    random.seed(7)
+    genome = {"A": _simple_chrom("A"), "B": _simple_chrom("B")}
+    for chrom in ("A", "B"):
+        genome[chrom]["p_rec"] = [(1, 500000, 1e-4)]
+    co_prob = 0.25
+    _, event_log, _ = run_simulation(genome, n_gen=50, co_prob=co_prob)
+    n_total = len(event_log)
+    assert n_total >= 50, f"Too few events ({n_total}) to test fraction reliably"
+    n_co    = sum(1 for e in event_log if e["type"] == "CO")
+    observed = n_co / n_total
+    # 3-sigma tolerance: std = sqrt(p*(1-p)/n)
+    import math
+    tolerance = 3 * math.sqrt(co_prob * (1 - co_prob) / n_total)
+    assert abs(observed - co_prob) <= tolerance, (
+        f"CO fraction {observed:.3f} is not within 3σ of co_prob={co_prob} "
+        f"(tolerance ±{tolerance:.3f}, n={n_total})"
+    )

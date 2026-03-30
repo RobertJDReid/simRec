@@ -29,10 +29,10 @@ simRec simulates mitotic recombination and LOH in a diploid yeast chromosome acr
 - Size-aware classification: blocks exceeding `--gc-max` classified as DCO or flagged complex
 - Terminal cluster heuristic reclassification via `reclassify_terminal_clusters`
 - Adjacent-to-terminal flagging for LOH clusters near telomeres
-- True event logging (`--log-events`) with per-generation haplotype snapshots
+- Ground-truth event logging (`--observed-out`) with per-generation haplotype snapshots
 - Combined haplotype + LOH visualization
-- Tab-separated event output for scripting and batch runs (`--events`, `--events-nh`)
-- Batch runner (`simRec_batch.py`) for large-scale multi-cell simulations
+- Tab-separated inferred event output for scripting (`--inferred`, `--inferred-out`) and ground-truth output (`--observed`, `--observed-out`)
+- Batch runner (`simRec_batch.py`) for large-scale multi-cell simulations with separate inferred and ground-truth outputs
 - Reproducible runs via random seed
 - Dependencies beyond the standard library: `matplotlib`, `tqdm` (batch runner only)
 
@@ -93,9 +93,10 @@ python simRec.py genome_chrI.csv [options]
 | `--seed` | int | `None` | Random seed for reproducibility |
 | `--plot` | flag | off | Display combined haplotype + LOH plot interactively |
 | `--plot-out` | str | `None` | Save plot to file (PNG or PDF) instead of displaying |
-| `--events` | flag | off | Output classified events as tab-separated table with header |
-| `--events-nh` | flag | off | Output classified events as tab-separated table without header (for appending runs) |
-| `--log-events` | str | `None` | Write true mechanical events to FILE as CSV; also writes `haplotype.txt` alongside |
+| `--inferred` | flag | off | Print post-hoc classified events (inferred from the final LOH map) to stdout as a tab-separated table with header |
+| `--inferred-out` | str | `None` | Write post-hoc classified events to FILE instead of stdout |
+| `--observed` | flag | off | Print ground-truth recombination events (tracked as the simulation runs) to stdout as a tab-separated table with header |
+| `--observed-out` | str | `None` | Write ground-truth recombination events to FILE; also writes `haplotype.txt` alongside |
 | `--version` | flag | — | Print version and exit |
 
 ### Examples
@@ -112,25 +113,45 @@ Run and save a plot:
 python simRec.py genome_chrI.csv --n-gen 20 --p-rec 1e-4 --seed 42 --plot-out results.png
 ```
 
-Output classified events as a tab-separated table:
+Print classified events to stdout:
 
 ```bash
-python simRec.py genome_chrI.csv --n-gen 20 --p-rec 1e-5 --events
+python simRec.py genome_chrI.csv --n-gen 20 --p-rec 1e-5 --inferred
 ```
 
-Accumulate multiple runs into a single file:
+Write inferred events to a file:
 
 ```bash
-# First run — write header
-python simRec.py genome_chrI.csv --n-gen 20 --p-rec 1e-5 --events > results.tsv
+python simRec.py genome_chrI.csv --n-gen 20 --p-rec 1e-5 --inferred-out results.tsv
+```
 
-# Subsequent runs — append without header
+Accumulate multiple runs into a single file by piping with header suppressed:
+
+```bash
+# First run — with header
+python simRec.py genome_chrI.csv --n-gen 20 --p-rec 1e-5 --inferred > results.tsv
+
+# Subsequent runs — pipe without header using tail
 for i in $(seq 2 100); do
-    python simRec.py genome_chrI.csv --n-gen 20 --p-rec 1e-5 --events-nh >> results.tsv
+    python simRec.py genome_chrI.csv --n-gen 20 --p-rec 1e-5 --inferred | tail -n +2 >> results.tsv
 done
 ```
 
-`--events` and `--plot` can be combined to produce a table and a figure in the same run.
+Print ground-truth events alongside inferred events in one run:
+
+```bash
+python simRec.py genome_chrI.csv --n-gen 20 --p-rec 1e-5 --inferred --observed
+```
+
+Write both to separate files in one run:
+
+```bash
+python simRec.py genome_chrI.csv --n-gen 20 --p-rec 1e-5 \
+    --inferred-out inferred.tsv \
+    --observed-out observed.csv
+```
+
+`--inferred`, `--inferred-out`, `--observed`, `--observed-out`, and `--plot` are all independent and can be combined freely in a single run.
 
 ### Example output
 
@@ -347,7 +368,14 @@ pytest test_simRec.py -v
 
 ## Batch runner
 
-`simRec_batch.py` runs many independent cell lineages and accumulates classified events into a single tab-separated file. Output is identical in format to `--events` with an additional `cell` column.
+`simRec_batch.py` simulates many independent cell lineages and writes results to one or two output files. Each cell is a fully independent run of `run_simulation()` followed by `classify_events()` and `reclassify_terminal_clusters()` — cells share no state.
+
+Two kinds of output can be produced in the same run:
+
+- **Inferred events** (`--inferred-out`) — post-hoc LOH classification of the final haplotype state, identical in format and interpretation to `--inferred` / `--inferred-out` in `simRec.py`, with an additional `cell` column.
+- **Observed events** (`--observed-out`) — ground-truth recombination events captured as the simulation runs, identical in content to the `event_log` returned by `run_simulation()`, with an additional `cell` column. This is the mechanistic record of what actually happened, independent of what is detectable from the LOH map.
+
+### Command line
 
 ```bash
 python simRec_batch.py genome_chrII.csv [options]
@@ -356,24 +384,81 @@ python simRec_batch.py genome_chrII.csv [options]
 | Argument | Type | Default | Description |
 |---|---|---|---|
 | `genome_file` | positional | — | Path to genome CSV |
-| `--n-cells` | int | `1000` | Number of independent cell lineages |
+| `--n-cells` | int | `1000` | Number of independent cell lineages to simulate |
 | `--n-gen` | int | `5000` | Generations per cell |
-| `--p-rec` | float | `3.7e-10` | Recombination probability per bp (Sui et al. 2020 lower bound) |
+| `--p-rec` | float | `3.7e-10` | Recombination probability per bp per generation (Sui et al. 2020 lower-bound estimate) |
 | `--gc-min` | int | `100` | Minimum GC tract size (bp) |
 | `--gc-max` | int | `5000` | Maximum GC tract size (bp) |
-| `--co-nco` | float | `0.5` | Crossover probability per event |
-| `--seed` | int | `None` | Master random seed |
-| `--out` | str | stdout | Output file path; if omitted, writes to stdout |
+| `--co-nco` | float | `0.5` | Crossover probability per recombination event |
+| `--seed` | int | `None` | Master random seed; per-cell seeds are derived deterministically from this |
+| `--inferred-out` | str | stdout | Write post-hoc classified events (inferred from the final LOH map) to FILE. If omitted, writes to stdout and suppresses the progress bar |
+| `--observed-out` | str | `None` | Write ground-truth recombination events to FILE. Omitting this flag disables ground-truth output entirely |
+| `--version` | flag | — | Print version and exit |
 
-Output goes to stdout by default (progress bar suppressed) so results can be piped directly into downstream scripts. Specifying `--out` enables the progress bar on stderr.
+### Output formats
+
+**Inferred events** (`--inferred-out` or stdout) — tab-separated with header:
+
+| Column | Description |
+|---|---|
+| `cell` | Cell identifier (1-based integer) |
+| `time` | ISO timestamp of the batch run start (same for all rows) |
+| `event` | Event type: `GC-NCO`, `GC-CO`, `CO-terminal`, `DCO` |
+| `start` | First bp of LOH block |
+| `end` | Last bp of LOH block |
+| `haplotype` | `A` or `B` |
+| `left` | LOH state of left neighbor: `A`, `B`, `het`, or `tel` |
+| `right` | LOH state of right neighbor: `A`, `B`, `het`, or `tel` |
+| `adjacent_to_terminal` | `True` or `False` |
+| `reclassified` | `True` if the terminal cluster heuristic modified this record |
+| `complex` | `True` if the block could not be cleanly resolved |
+
+**Observed events** (`--observed-out`) — tab-separated with header:
+
+| Column | Description |
+|---|---|
+| `cell` | Cell identifier (1-based integer) |
+| `gen` | Generation in which the event occurred (1-based) |
+| `chrom` | Chromosome name |
+| `type` | Mechanistic event type: `GC` (gene conversion only) or `CO` (gene conversion with crossover) |
+| `start` | GC tract start position (bp) |
+| `end` | GC tract end position (bp) |
+
+Note that `--observed-out` does not produce the `haplotype.txt` sidecar that `--observed-out` writes in `simRec.py`. Per-generation haplotype snapshots are not practical to aggregate across thousands of cells.
+
+### Examples
+
+Write inferred events to file (enables progress bar on stderr):
 
 ```bash
-# Large batch to file with progress bar
-python simRec_batch.py genome_chrII.csv --n-cells 10000 --n-gen 5000 --seed 1 --out batch.tsv
+python simRec_batch.py genome_chrII.csv --n-cells 10000 --n-gen 5000 --seed 1 \
+    --inferred-out batch_inferred.tsv
+```
 
-# Pipe directly into analysis
+Write both inferred and ground-truth events in one run:
+
+```bash
+python simRec_batch.py genome_chrII.csv --n-cells 10000 --n-gen 5000 --seed 1 \
+    --inferred-out batch_inferred.tsv \
+    --observed-out batch_observed.tsv
+```
+
+Write only ground-truth events (discard inferred output):
+
+```bash
+python simRec_batch.py genome_chrII.csv --n-cells 1000 --n-gen 5000 \
+    --observed-out batch_observed.tsv > /dev/null
+```
+
+Pipe inferred output directly into a downstream script:
+
+```bash
 python simRec_batch.py genome_chrII.csv --n-cells 1000 --n-gen 5000 | Rscript analyze.R
 ```
+
+### Architecture note
+
+`run_one_cell()` is a plain module-level function so it can be passed to `multiprocessing.Pool.map()` without pickling issues when parallelisation is added. Per-cell random seeds are derived from the master seed at startup, so results are fully reproducible regardless of execution order.
 
 ---
 

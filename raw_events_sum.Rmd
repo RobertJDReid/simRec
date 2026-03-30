@@ -1,0 +1,36 @@
+---
+title: "Raw Events"
+author: "Robert Reid"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+knitr::opts_chunk$set(echo = TRUE)
+theme_set(theme_bw())
+```
+
+## Counting up raw events
+
+
+#### Load data
+
+```{r load data, echo=FALSE, message=FALSE, warning=FALSE}
+fn = list.files("raw_events/",pattern = "*.csv",full.names = TRUE)
+
+#tf = read_delim(f[1]) |>
+#  mutate (
+#    class = factor(event,levels = c("CO-GC","CO-terminal","NCO-GC"))
+#  )
+#
+#sf = tf |> count(class, .drop = FALSE)
+
+bd = map(fn,read_csv) |>
+  bind_rows()
+
+
+table(bd$type)
+```
+
+

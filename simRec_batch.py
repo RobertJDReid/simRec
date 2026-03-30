@@ -25,7 +25,7 @@ Usage
     python simRec_batch.py genome_chrII.csv --n-cells 1000 --n-gen 5000
 
     # Write to file:
-    python simRec_batch.py genome_chrII.csv --n-cells 1000 --n-gen 5000 --out results.tsv
+    python simRec_batch.py genome_chrII.csv --n-cells 1000 --n-gen 5000 --inferred-out results.tsv
 
     # Pipe into another script:
     python simRec_batch.py genome_chrII.csv --n-cells 500 --n-gen 5000 | downstream.py
@@ -48,6 +48,7 @@ from simRec import (
     load_genome,
     run_simulation,
     classify_events,
+    reclassify_terminal_clusters,
 )
 
 __version__ = "0.10"
@@ -91,14 +92,17 @@ def run_one_cell(cell_id, genome, n_gen, gc_min, gc_max, co_prob, seed):
 
     try:
         cell_genome = copy.deepcopy(genome)
-        final_cell  = run_simulation(
+        final_cell, event_log, _ = run_simulation(
             cell_genome,
             n_gen    = n_gen,
             gc_min   = gc_min,
             gc_max   = gc_max,
             co_prob  = co_prob,
         )
-        events = classify_events(final_cell)
+        events = reclassify_terminal_clusters(
+            classify_events(final_cell, gc_max=gc_max),
+            gc_max=gc_max,
+        )
     finally:
         random.setstate(saved_state)
 
@@ -112,9 +116,23 @@ def run_one_cell(cell_id, genome, n_gen, gc_min, gc_max, co_prob, seed):
             e["haplotype"],
             e["flanking_left"],
             e["flanking_right"],
-            str(e["adjacent_to_terminal"]),
+            str(e.get("adjacent_to_terminal", False)),
+            str(e.get("reclassified", False)),
+            str(e.get("complex", False)),
         ))
-    return rows
+
+    obs_rows = []
+    for e in event_log:
+        obs_rows.append((
+            str(cell_id),
+            str(e["gen"]),
+            e["chrom"],
+            e["type"],
+            str(e["start"]),
+            str(e["end"]),
+        ))
+
+    return rows, obs_rows
 
 
 # ---------------------------------------------------------------------------
@@ -146,17 +164,28 @@ def main():
                         help="Crossover probability per recombination event")
     parser.add_argument("--seed",    type=int, default=None,
                         help="Master random seed for reproducibility")
-    parser.add_argument("--out",     type=str, default=None,
-                        help="Output file path. If not given, writes to stdout.")
+    parser.add_argument("--inferred-out", type=str, default=None, dest="inferred_out",
+                        help="Output file for post-hoc classified events (inferred from the final "
+                             "LOH map). If not given, writes to stdout.")
+    parser.add_argument("--observed-out", type=str, default=None, dest="observed_out",
+                        help="Output file for ground-truth recombination events tracked as the "
+                             "simulation runs. Written as TSV with a 'cell' column. "
+                             "Columns: cell, gen, chrom, type, start, end")
     args = parser.parse_args()
 
     # -----------------------------------------------------------------------
-    # Set up output stream
+    # Set up output streams
     # -----------------------------------------------------------------------
-    if args.out:
-        out_fh = open(args.out, "w")
+    if args.inferred_out:
+        inferred_fh = open(args.inferred_out, "w")
     else:
-        out_fh = sys.stdout
+        inferred_fh = sys.stdout
+
+    if args.observed_out:
+        observed_fh = open(args.observed_out, "w")
+        observed_fh.write("\t".join(("cell", "gen", "chrom", "type", "start", "end")) + "\n")
+    else:
+        observed_fh = None
 
     # -----------------------------------------------------------------------
     # Master seed → per-cell seeds
@@ -177,8 +206,9 @@ def main():
     timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
     header = ("cell", "time", "event", "start", "end",
-              "haplotype", "left", "right", "adjacent_to_terminal")
-    out_fh.write("\t".join(header) + "\n")
+              "haplotype", "left", "right", "adjacent_to_terminal",
+              "reclassified", "complex")
+    inferred_fh.write("\t".join(header) + "\n")
 
     desc = f"simRec_batch  chr={chrom_name}  L={chrom_length:,}  " \
            f"n_gen={args.n_gen:,}  p_rec={args.p_rec:.2e}"
@@ -186,9 +216,9 @@ def main():
     try:
         with tqdm(total=args.n_cells, desc=desc, file=sys.stderr,
                   unit="cell", dynamic_ncols=True,
-                  disable=args.out is None) as pbar:
+                  disable=args.inferred_out is None) as pbar:
             for cell_id in range(1, args.n_cells + 1):
-                rows = run_one_cell(
+                rows, obs_rows = run_one_cell(
                     cell_id  = cell_id,
                     genome   = genome,
                     n_gen    = args.n_gen,
@@ -198,11 +228,16 @@ def main():
                     seed     = cell_seeds[cell_id - 1],
                 )
                 for row in rows:
-                    out_fh.write(row[0] + "\t" + timestamp + "\t" + "\t".join(row[1:]) + "\n")
+                    inferred_fh.write(row[0] + "\t" + timestamp + "\t" + "\t".join(row[1:]) + "\n")
+                if observed_fh is not None:
+                    for obs_row in obs_rows:
+                        observed_fh.write("\t".join(obs_row) + "\n")
                 pbar.update(1)
     finally:
-        if args.out:
-            out_fh.close()
+        if args.inferred_out:
+            inferred_fh.close()
+        if observed_fh is not None:
+            observed_fh.close()
 
 
 if __name__ == "__main__":
