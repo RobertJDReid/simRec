@@ -110,6 +110,7 @@ def run_one_cell(cell_id, genome, n_gen, gc_min, gc_max, co_prob, seed):
     for e in events:
         rows.append((
             str(cell_id),
+            e["chrom"],
             e["type"],
             str(e["start"]),
             str(e["end"]),
@@ -130,6 +131,7 @@ def run_one_cell(cell_id, genome, n_gen, gc_min, gc_max, co_prob, seed):
             e["type"],
             str(e["start"]),
             str(e["end"]),
+            e["converts_to"],
         ))
 
     return rows, obs_rows
@@ -183,7 +185,7 @@ def main():
 
     if args.logged_out:
         logged_fh = open(args.logged_out, "w")
-        logged_fh.write("\t".join(("cell", "gen", "chrom", "type", "start", "end")) + "\n")
+        logged_fh.write("\t".join(("cell", "gen", "chrom", "type", "start", "end", "converts_to")) + "\n")
     else:
         logged_fh = None
 
@@ -205,7 +207,7 @@ def main():
     # -----------------------------------------------------------------------
     timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
-    header = ("cell", "time", "event", "start", "end",
+    header = ("cell", "time", "chrom", "event", "start", "end",
               "haplotype", "left", "right", "adjacent_to_terminal",
               "reclassified", "complex")
     observed_fh.write("\t".join(header) + "\n")

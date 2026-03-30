@@ -1,0 +1,273 @@
+---
+title: "Observed vs Logged Event Support"
+author: "Robert Reid"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(IRanges)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Overview
+
+This document evaluates how well observed recombination events from a simulation
+run are supported by the underlying logged true events. Three event types are
+assessed: **NCO-GC**, **CO-GC**, and **CO-terminal**.
+
+Support criteria differ by event type:
+
+- **NCO-GC**: supported if a logged NCO event in the same cell shares an exact
+  start and end position (`semi_join` on cell, start, end).
+- **CO-GC**: supported if a logged CO event in the same cell is an exact range
+  match (`pcompare` code = 0).
+- **CO-terminal**: supported if a logged CO event in the same cell either shares
+  a boundary consistent with the side of the centromere (codes -1, -3, 1, 3) or
+  is directly adjacent with no gap (codes -5, 5). Directionality is enforced:
+  events left of the centromere must share a common end or be adjacent on the
+  right; events right of the centromere must share a common start or be adjacent
+  on the left.
+
+---
+
+## Configuration
+
+Edit this section to point to your input files and centromere positions.
+
+```{r config}
+# Input files
+obs_file <- "test_output/obs2.tsv"
+log_file <- "test_output/log2.tsv"
+
+# Centromere positions: a named numeric vector where names are chromosome IDs
+# and values are the centromere midpoint position on that chromosome.
+# Replace with your actual centromere positions.
+cen_positions <- c(
+  "1" = 151465,
+  "2" = 239200
+  # add chromosomes as needed
+)
+```
+
+---
+
+## Load Data
+
+```{r load}
+obs <- read_delim(obs_file, delim = "\t", show_col_types = FALSE) |>
+  separate_wider_delim(event, delim = "-", names = c("co", "event_type"),
+                       too_many = "merge")
+
+log_events <- read_delim(log_file, delim = "\t", show_col_types = FALSE)
+```
+
+---
+
+## Helper Functions
+
+```{r helpers}
+# --- NCO-GC support ---
+# An observed NCO-GC is supported if a logged NCO event exists in the same cell
+# with an identical start and end position.
+# Returns n_supporting = 1 if matched, 0 otherwise (consistent with CO functions).
+check_nco_support <- function(obs_nco, log_events) {
+  logged_nco <- log_events |>
+    filter(type == "NCO") |>
+    select(cell, start, end)
+
+  obs_nco |>
+    mutate(
+      n_supporting = map_int(seq_len(n()), function(i) {
+        nrow(semi_join(
+          obs_nco[i, c("cell", "start", "end")],
+          logged_nco,
+          by = c("cell", "start", "end")
+        ))
+      })
+    )
+}
+
+# --- CO support via IRanges pcompare ---
+# Returns a per-observation data frame with the count of supporting logged events.
+check_co_support <- function(obs_co, log_events, valid_codes_fn) {
+  logged_co <- log_events |>
+    filter(type == "CO") |>
+    select(cell, start, end)
+
+  obs_ranges <- IRanges(
+    start = obs_co$start,
+    end   = obs_co$end,
+    names = as.character(obs_co$cell)
+  )
+
+  log_ranges <- IRanges(
+    start = logged_co$start,
+    end   = logged_co$end,
+    names = as.character(logged_co$cell)
+  )
+
+  common_cells <- intersect(names(obs_ranges), names(log_ranges))
+
+  if (length(common_cells) == 0) {
+    return(obs_co |> mutate(n_supporting = 0L))
+  }
+
+  # For each cell, compare every observed range against every logged range
+  results <- map(common_cells, function(cell_id) {
+    obs_sub <- obs_ranges[names(obs_ranges) == cell_id]
+    log_sub <- log_ranges[names(log_ranges) == cell_id]
+
+    idx <- expand.grid(a = seq_along(obs_sub), b = seq_along(log_sub))
+    cmp <- pcompare(obs_sub[idx$a], log_sub[idx$b])
+
+    # Retrieve the original obs row indices for this cell
+    obs_row_idx <- which(as.character(obs_co$cell) == cell_id)
+
+    data.frame(
+      obs_row    = obs_row_idx[idx$a],
+      log_idx    = idx$b,
+      obs_start  = start(obs_sub)[idx$a],
+      obs_end    = end(obs_sub)[idx$a],
+      log_start  = start(log_sub)[idx$b],
+      log_end    = end(log_sub)[idx$b],
+      code       = cmp,
+      cell       = cell_id,
+      stringsAsFactors = FALSE
+    )
+  }) |>
+    bind_rows()
+
+  # Apply the caller-supplied filter to keep only valid comparisons
+  supported_pairs <- results |>
+    filter(valid_codes_fn(code, obs_start, obs_end, log_start, log_end))
+
+  # Count supporting logged events per observed range
+  support_counts <- supported_pairs |>
+    count(obs_row, name = "n_supporting")
+
+  obs_co |>
+    mutate(obs_row = row_number()) |>
+    left_join(support_counts, by = "obs_row") |>
+    mutate(n_supporting = replace_na(n_supporting, 0L)) |>
+    select(-obs_row)
+}
+
+# --- CO-GC valid codes ---
+# Exact match only (pcompare code 0).
+co_gc_valid <- function(code, obs_start, obs_end, log_start, log_end) {
+  code == 0
+}
+
+# --- CO-terminal valid codes (with directionality) ---
+# An observed terminal CO is left of the centromere if its midpoint is < CEN.
+# Left of CEN  : the observed range should share a common END with the logged
+#                range (code -1, -3) or be adjacent on its right (code -5).
+# Right of CEN : the observed range should share a common START with the logged
+#                range (code 1, 3) or be adjacent on its left (code 5).
+make_co_terminal_valid <- function(cen_pos) {
+  function(code, obs_start, obs_end, log_start, log_end) {
+    obs_mid    <- (obs_start + obs_end) / 2
+    left_of_cen <- obs_mid < cen_pos
+    case_when(
+      left_of_cen  & code %in% c(-1, -3, -5) ~ TRUE,
+      !left_of_cen & code %in% c( 1,  3,  5) ~ TRUE,
+      TRUE ~ FALSE
+    )
+  }
+}
+```
+
+> **Note on `pcompare` codes for CO-terminal:**
+> Negative codes mean the observed range precedes or extends left of the logged
+> range; positive codes mean it extends right. Codes ±1 and ±3 indicate a shared
+> boundary; codes ±5 indicate direct adjacency with no gap.
+
+---
+
+## Compute Support
+
+```{r compute}
+# --- NCO-GC ---
+nco_results <- obs |>
+  filter(co == "NCO", event_type == "GC") |>
+  select(cell, chrom, start, end) |>
+  check_nco_support(log_events)
+
+# --- CO-GC ---
+co_gc_results <- obs |>
+  filter(co == "CO", event_type == "GC") |>
+  select(cell, chrom, start, end) |>
+  check_co_support(log_events, valid_codes_fn = co_gc_valid)
+
+# --- CO-terminal ---
+# Groups by chromosome so the correct centromere position is applied to each.
+# chrom_num is a working column used only for the cen_positions lookup and is
+# dropped before binding.
+co_terminal_results <- obs |>
+  filter(co == "CO", event_type == "terminal") |>
+  select(cell, chrom, start, end) |>
+  mutate(
+    chrom_num = as.numeric(as.roman(chrom)),
+    cen_pos   = cen_positions[as.character(chrom_num)]
+  ) |>
+  group_by(chrom) |>
+  group_modify(~ {
+    cen <- unique(.x$cen_pos)
+    check_co_support(
+      obs_co         = select(.x, -cen_pos, -chrom_num),
+      log_events     = log_events,
+      valid_codes_fn = make_co_terminal_valid(cen)
+    )
+  }) |>
+  ungroup()
+```
+
+---
+
+## Per-Observation Detail
+
+```{r detail}
+# All three result data frames now share the same columns:
+# cell, chrom, start, end, n_supporting
+# chrom is carried through so per-chromosome breakdowns are possible downstream.
+detail <- bind_rows(
+  nco_results         |> mutate(event_type = "NCO-GC"),
+  co_gc_results       |> mutate(event_type = "CO-GC"),
+  co_terminal_results |> mutate(event_type = "CO-terminal")
+) |>
+  mutate(is_supported = n_supporting > 0)
+
+detail
+```
+
+---
+
+## Summary Table
+
+```{r summary}
+# Rolled-up summary by event type
+summary_tbl <- detail |>
+  group_by(event_type) |>
+  summarise(
+    n_observed    = n(),
+    n_supported   = sum(is_supported),
+    pct_supported = round(100 * n_supported / n_observed, 1),
+    .groups = "drop"
+  )
+
+summary_tbl
+
+# Per-chromosome breakdown (useful once multi-chromosome simulations are in use)
+summary_by_chrom <- detail |>
+  group_by(chrom, event_type) |>
+  summarise(
+    n_observed    = n(),
+    n_supported   = sum(is_supported),
+    pct_supported = round(100 * n_supported / n_observed, 1),
+    .groups = "drop"
+  )
+
+summary_by_chrom
+```

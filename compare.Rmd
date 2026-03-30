@@ -1,0 +1,90 @@
+---
+title: "compare"
+author: "Robert Reid"
+date: "2026-03-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Compare logged vs observed events
+
+Observed events are called exp.csv
+Logged true events are called true.csv
+
+```{r cars}
+obs = read_delim("test_output/obs2.csv",delim = "\t") |>
+  separate(event, into = c("co","event_type"),sep = "-") # use separate_wider_delim
+trev = read_delim("test_output/log2.csv",delim="\t")
+
+```
+
+NCO
+
+```{r}
+nco = obs |>
+  filter(co == "NCO") |>
+  select(cell,start,end)
+
+cells = as.numeric(names(table(nco$cell)))
+
+nco_events = trev |>
+  filter(type=="NCO") |>
+  select(cell,start,end)
+
+supported = semi_join(nco, nco_events) # compare nrows of this to nrows(nco)
+```
+
+CO
+
+```{r}
+library(IRanges)
+co = obs |>
+  #filter(co == "CO", event_type == "terminal") |>
+  filter(co == "CO") |>
+  select(cell,start,end)
+
+co_obs_ranges = IRanges(start = co$start,end = co$end,names = as.character(co$cell))
+
+co_events = trev |>
+  filter(type=="CO") |>
+  select(cell,start,end)
+
+co_events_ranges = IRanges(start = co_events$start,end = co_events$end,names = as.character(co_events$cell))
+
+common_names = intersect(names(co_obs_ranges),names(co_events_ranges))
+
+results = map(common_names,function(nm){
+  obs_sub = co_obs_ranges[names(co_obs_ranges)==nm]
+  evt_sub = co_events_ranges[names(co_events_ranges)==nm]
+  
+  # expand to matching names
+  
+  idx = expand.grid(a = seq_along(obs_sub), b = seq_along(evt_sub))
+  
+  # Run pcompare on all pairs
+  cmp <- pcompare(obs_sub[idx$a], evt_sub[idx$b])
+  
+  data.frame(
+    name    = nm,
+    A_index = idx$a,
+    B_index = idx$b,
+    A_start = start(obs_sub)[idx$a],
+    A_end   = end(obs_sub)[idx$a],
+    B_start = start(evt_sub)[idx$b],
+    B_end   = end(evt_sub)[idx$b],
+    code    = cmp,
+    letter  = rangeComparisonCodeToLetter(cmp)
+  )
+})
+result_df <- do.call(rbind, results)
+rownames(result_df) <- NULL
+
+result_df |>
+  filter(abs(code) %in% c(0,1,3,5))
+```
+
+

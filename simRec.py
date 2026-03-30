@@ -344,19 +344,21 @@ def recombine(post_rep_cell, gc_min=100, gc_max=5000, co_prob=0.5):
             continue
         gc_start, gc_end = site
 
+        converts_to = query_value(donor["haplotype"], (gc_start + gc_end) // 2)
         _apply_gene_conversion(initiator, donor, gc_start, gc_end)
 
         if random.random() < co_prob:
             _apply_crossover(initiator, donor, gc_start, gc_end)
             event_type = "CO"
         else:
-            event_type = "GC"
+            event_type = "NCO"
 
         logged.append({
-            "chrom": initiator["name"],
-            "type":  event_type,
-            "start": gc_start,
-            "end":   gc_end,
+            "chrom":       initiator["name"],
+            "type":        event_type,
+            "start":       gc_start,
+            "end":         gc_end,
+            "converts_to": converts_to,
         })
 
     return post_rep_cell, logged
@@ -645,6 +647,7 @@ def classify_events(cell, gc_max=5000):
         if left_segs:
             events.append({
                 "type":                 "CO-terminal",
+                "chrom":                chrom["name"],
                 "start":                1,
                 "end":                  cen_start - 1,
                 "haplotype":            left_segs[-1][2],
@@ -655,6 +658,7 @@ def classify_events(cell, gc_max=5000):
         if right_segs:
             events.append({
                 "type":                 "CO-terminal",
+                "chrom":                chrom["name"],
                 "start":                cen_end + 1,
                 "end":                  chrom_length,
                 "haplotype":            right_segs[0][2],
@@ -685,6 +689,7 @@ def classify_events(cell, gc_max=5000):
         if touches_left_tel or touches_right_tel:
             events.append({
                 "type":                 "CO-terminal",
+                "chrom":                chrom["name"],
                 "start":                seg_start,
                 "end":                  seg_end,
                 "haplotype":            hap,
@@ -710,6 +715,7 @@ def classify_events(cell, gc_max=5000):
 
                 rec = {
                     "type":                 event_type,
+                    "chrom":                chrom["name"],
                     "start":                seg_start,
                     "end":                  seg_end,
                     "haplotype":            hap,
@@ -737,6 +743,7 @@ def classify_events(cell, gc_max=5000):
 
             events.append({
                 "type":                 event_type,
+                "chrom":                chrom["name"],
                 "start":                seg_start,
                 "end":                  seg_end,
                 "haplotype":            hap,
@@ -1155,10 +1162,10 @@ if __name__ == "__main__":
     def _write_event_log(event_log, path):
         """Write the logged event log to a CSV file."""
         with open(path, "w") as fh:
-            fh.write("gen,chrom,type,start,end\n")
+            fh.write("gen,chrom,type,start,end,converts_to\n")
             for e in event_log:
                 fh.write(f"{e['gen']},{e['chrom']},{e['type']},"
-                         f"{e['start']},{e['end']}\n")
+                         f"{e['start']},{e['end']},{e['converts_to']}\n")
 
     def _write_haplotype_map(haplotype_snapshots, log_path):
         """
@@ -1181,7 +1188,7 @@ if __name__ == "__main__":
     def _format_logged_row(e):
         return "\t".join((
             str(e["gen"]), e["chrom"], e["type"],
-            str(e["start"]), str(e["end"]),
+            str(e["start"]), str(e["end"]), e["converts_to"],
         ))
 
     # Run simulation whenever any output mode is active, or in default verbose mode
@@ -1194,7 +1201,7 @@ if __name__ == "__main__":
 
     # --logged / --logged-out
     if args.logged:
-        log_cols = ("gen", "chrom", "type", "start", "end")
+        log_cols = ("gen", "chrom", "type", "start", "end", "converts_to")
         print("\t".join(log_cols))
         for e in event_log:
             print(_format_logged_row(e))
@@ -1208,12 +1215,13 @@ if __name__ == "__main__":
         events    = classify_events(final_cell, gc_max=args.gc_max)
         reclass   = reclassify_terminal_clusters(events, gc_max=args.gc_max)
         timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-        obs_cols  = ("time", "event", "start", "end", "haplotype", "left", "right",
+        obs_cols  = ("time", "chrom", "event", "start", "end", "haplotype", "left", "right",
                      "adjacent_to_terminal", "reclassified", "complex")
 
         def _format_observed_row(e):
             return "\t".join((
                 timestamp,
+                e["chrom"],
                 e["type"],
                 str(e["start"]),
                 str(e["end"]),
