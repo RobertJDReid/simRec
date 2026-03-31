@@ -30,6 +30,9 @@ Support criteria differ by event type:
   right; events right of the centromere must share a common start or be adjacent
   on the left.
 
+
+__Need to add DCO support__
+
 ---
 
 ## Configuration
@@ -45,8 +48,12 @@ log_file <- "test_output/log2.tsv"
 # and values are the centromere midpoint position on that chromosome.
 # Replace with your actual centromere positions.
 cen_positions <- c(
-  "1" = 151465,
-  "2" = 239200
+  "1"  = 151465,
+  "2"  = 239200,
+  "3"  = 112830,
+  "4"  = 450091,
+  "5"  = 151545,
+  "15" = 326803
   # add chromosomes as needed
 )
 ```

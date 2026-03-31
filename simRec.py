@@ -523,21 +523,21 @@ def classify_events(cell, gc_max=5000):
     The LOH segment list (from compute_loh) is scanned for non-"het" blocks.
     Each is classified as one of:
 
-        NCO-GC      : Internal LOH block ≤ gc_max where the haplotype phase
-                      on homolog A does NOT switch across the block.
-
-        CO-GC       : Internal LOH block ≤ gc_max where the haplotype phase
-                      on homolog A DOES switch across the block.
-
-        DCO         : Internal LOH block > gc_max flanked by het on both sides.
-                      Cannot be a gene conversion; interpreted as a double
-                      crossover bracketing the region.
-
-        CO-terminal : LOH block that extends to a telomere (start == 1 or
-                      end == chrom_length).
-
-        TEL-TEL     : Entire chromosome is LOH. Reported as two CO-terminal
-                      events anchored at the CEN boundaries.
+        NCO-GC       : Internal LOH block ≤ gc_max where the haplotype phase
+                       on homolog A does NOT switch across the block.
+ 
+        CO-GC        : Internal LOH block ≤ gc_max where the haplotype phase
+                       on homolog A DOES switch across the block.
+ 
+        DCO-internal : Internal LOH block > gc_max flanked by het on both sides.
+                       Cannot be a gene conversion; interpreted as a double
+                       crossover bracketing the region.
+ 
+        CO-terminal  : LOH block that extends to a telomere (start == 1 or
+                       end == chrom_length).
+ 
+        TEL-TEL      : Entire chromosome is LOH. Reported as two CO-terminal
+                       events anchored at the CEN boundaries.
 
     Blocks > gc_max with a LOH neighbor on either side receive type "NCO-GC"
     with complex=True, flagging them for case-by-case examination.
@@ -548,7 +548,7 @@ def classify_events(cell, gc_max=5000):
         Pre-replication cell {"A": chrom, "B": chrom}.
     gc_max : int
         Maximum gene conversion tract size used in the simulation (default 5000).
-        Internal blocks exceeding this size are classified as DCO or complex.
+        Internal blocks exceeding this size are classified as DCO-internal or complex.
 
     Returns
     -------
@@ -703,11 +703,11 @@ def classify_events(cell, gc_max=5000):
 
             # Size check: blocks larger than gc_max cannot be gene conversions.
             # Classify by flanking context:
-            #   het on both sides → DCO (double crossover bracketing the region)
+            #   het on both sides → DCO-internal (double crossover bracketing the region)
             #   LOH neighbor on either side → complex (ambiguous, examine by case)
             if size > gc_max:
                 if fl in ("het", "tel") and fr in ("het", "tel"):
-                    event_type = "DCO"
+                    event_type = "DCO-internal"
                 else:
                     event_type = "NCO-GC"  # placeholder; complex flag set below
 
@@ -723,7 +723,7 @@ def classify_events(cell, gc_max=5000):
                     "flanking_right":       fr,
                     "adjacent_to_terminal": adj,
                 }
-                if event_type != "DCO":
+                if event_type != "DCO-internal":
                     rec["complex"] = True
                 events.append(rec)
                 continue
