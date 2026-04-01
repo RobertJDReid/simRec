@@ -26,7 +26,8 @@ Accumulated data will be loaded and plotted.
 #### Load data
 
 ```{r load data, echo=FALSE, message=FALSE, warning=FALSE}
-fn = list.files("batch_update/",pattern = "*.tsv",full.names = TRUE)
+#log_fn = list.files("batch/",pattern = "log\\d{2}.tsv",full.names = TRUE)
+obs_fn = list.files("batch10/",pattern = "obs\\d{2}.tsv",full.names = TRUE)
 
 #tf = read_delim(f[1]) |>
 #  mutate (
@@ -35,9 +36,9 @@ fn = list.files("batch_update/",pattern = "*.tsv",full.names = TRUE)
 #
 #sf = tf |> count(class, .drop = FALSE)
 
-bd = map(fn,function(fn){
+bd = map(obs_fn,function(fn){
   fc = read_delim(fn) |>
-    mutate(class = factor(event,levels = c("CO-GC","CO-terminal","NCO-GC")))
+    mutate(class = factor(event,levels = c("CO-GC","CO-terminal","NCO-GC","DCO-internal")))
   st = fc |> count(class, .drop = FALSE)
   return(st)
 }) |>
@@ -64,10 +65,16 @@ bd |>
 Summary
 
 ```{r}
-bdl |>
-  group_by(event) |>
+bd |>
+  group_by(class) |>
   summarise(
-    median = median(count,na.rm = TRUE)
+    median = median(n,na.rm = TRUE)
+  )
+
+bd |>
+  group_by(class) |>
+  summarise(
+    max = max(n,na.rm = TRUE)
   )
 ```
 

@@ -1,0 +1,13 @@
+Logged events
+gen	chrom	type	start	end	converts_to
+4	XV	CO	52555	57220	B
+5	XV	NCO	7586	9875	A
+15	XV	CO	1074051	1076225	A
+18	XV	CO	1006685	1008589	B
+19	XV	NCO	528724	529073	A
+
+Observed events
+time	chrom	event	start	end	haplotype	left	right	adjacent_to_terminal	reclassified	complex
+12:26:21	XV	CO-terminal	1	52554	A	tel	het	False	True	False
+12:26:21	XV	NCO-GC	528724	529073	A	het	het	False	False	False
+12:26:21	XV	CO-terminal	1076226	1091915	B	het	tel	False	True	False

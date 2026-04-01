@@ -41,8 +41,13 @@ Edit this section to point to your input files and centromere positions.
 
 ```{r config}
 # Single Input files
-obs_file <- "test_output/obs2.tsv"
-log_file <- "test_output/log2.tsv"
+#obs_file <- "test_output/obs2.tsv"
+#log_file <- "test_output/log2.tsv"
+
+# Folder of files
+
+obs_files = list.files("batch_ns_1/",pattern = "^obs",full.names = TRUE)
+log_files = list.files("batch_ns_1/",pattern = "^log",full.names = TRUE)
 
 # Centromere positions: a named numeric vector where names are chromosome IDs
 # and values are the centromere midpoint position on that chromosome.
@@ -73,11 +78,34 @@ cen_positions <- c(
 ## Load Data
 
 ```{r load}
-obs <- read_delim(obs_file, delim = "\t", show_col_types = FALSE) |>
+#obs <- read_delim(obs_file, delim = "\t", show_col_types = FALSE) |>
+#  separate_wider_delim(event, delim = "-", names = c("co", "event_type"),
+#                       too_many = "merge")
+#
+#log_events <- read_delim(log_file, delim = "\t", show_col_types = FALSE)
+
+# load folder of files
+expected_cells = 200 # this is should be set a bit above the max number of cells you
+                     #. expect in a data file
+
+obs = map(obs_files,\(f) read_delim(f, delim = "\t", show_col_types = FALSE)) |>
+  imap(\(df, i) mutate(df, file_idx = i)) |>
+  bind_rows() |>
+  dplyr::rename(ocn = cell) |> # ocn = old cell number
+  group_by(file_idx) |>
+  mutate(cell = (cur_group_id() -1 ) * expected_cells + ocn) |>
+  ungroup() |>
   separate_wider_delim(event, delim = "-", names = c("co", "event_type"),
                        too_many = "merge")
 
-log_events <- read_delim(log_file, delim = "\t", show_col_types = FALSE)
+log_events = map(log_files,read_delim, delim = "\t", show_col_types = FALSE) |>
+  imap(\(df, i) mutate(df, file_idx = i)) |>
+  bind_rows() |>
+  dplyr::rename(ocn = cell) |> # ocn = old cell number
+  group_by(file_idx) |>
+  mutate(cell = (cur_group_id() -1 ) * expected_cells + ocn) |>
+  ungroup()
+
 ```
 
 ---
@@ -284,8 +312,8 @@ make_co_terminal_valid <- function(cen_pos) {
     obs_mid    <- (obs_start + obs_end) / 2
     left_of_cen <- obs_mid < cen_pos
     case_when(
-      left_of_cen  & code %in% c(-1, -3, -5) ~ TRUE,
-      !left_of_cen & code %in% c( 1,  3,  5) ~ TRUE,
+      left_of_cen  & code %in% c(0,-1, -3, -5) ~ TRUE,
+      !left_of_cen & code %in% c(0, 1,  3,  5) ~ TRUE,
       TRUE ~ FALSE
     )
   }
@@ -390,4 +418,11 @@ summary_by_chrom <- detail |>
   )
 
 summary_by_chrom
+
+failed <- detail |>
+  filter(!is_supported) |>
+  select(event_type, cell, chrom, start, end, n_supporting) |>
+  arrange(event_type, chrom, cell, start)
+
+failed
 ```

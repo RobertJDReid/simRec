@@ -1,20 +1,40 @@
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set00.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set01.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set02.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set03.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set04.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set05.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set06.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set07.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set08.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set09.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set10.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set11.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set12.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set13.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set14.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set15.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set16.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set17.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set18.tsv
-python simRec_batch.py genome_chrII.csv --n-cells 88 --n-gen 3000 --co-nco 0.5 --out batch_update/set19.tsv
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log00.tsv --observed-out batch_ns_1/obs00.tsv --seed 261
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log01.tsv --observed-out batch_ns_1/obs01.tsv --seed 326
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log02.tsv --observed-out batch_ns_1/obs02.tsv --seed 330
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log03.tsv --observed-out batch_ns_1/obs03.tsv --seed 488
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log04.tsv --observed-out batch_ns_1/obs04.tsv --seed 604
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log05.tsv --observed-out batch_ns_1/obs05.tsv --seed 685
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log06.tsv --observed-out batch_ns_1/obs06.tsv --seed 981
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log07.tsv --observed-out batch_ns_1/obs07.tsv --seed 1067
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log08.tsv --observed-out batch_ns_1/obs08.tsv --seed 1420
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log09.tsv --observed-out batch_ns_1/obs09.tsv --seed 1608
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log10.tsv --observed-out batch_ns_1/obs10.tsv --seed 2376
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log11.tsv --observed-out batch_ns_1/obs11.tsv --seed 2912
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log12.tsv --observed-out batch_ns_1/obs12.tsv --seed 2966
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log13.tsv --observed-out batch_ns_1/obs13.tsv --seed 3227
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log14.tsv --observed-out batch_ns_1/obs14.tsv --seed 3530
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log15.tsv --observed-out batch_ns_1/obs15.tsv --seed 3543
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log16.tsv --observed-out batch_ns_1/obs16.tsv --seed 3704
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log17.tsv --observed-out batch_ns_1/obs17.tsv --seed 3923
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log18.tsv --observed-out batch_ns_1/obs18.tsv --seed 4072
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log19.tsv --observed-out batch_ns_1/obs19.tsv --seed 5193
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log20.tsv --observed-out batch_ns_1/obs20.tsv --seed 5269
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log21.tsv --observed-out batch_ns_1/obs21.tsv --seed 5272
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log22.tsv --observed-out batch_ns_1/obs22.tsv --seed 5645
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log23.tsv --observed-out batch_ns_1/obs23.tsv --seed 5847
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log24.tsv --observed-out batch_ns_1/obs24.tsv --seed 5882
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log25.tsv --observed-out batch_ns_1/obs25.tsv --seed 6106
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log26.tsv --observed-out batch_ns_1/obs26.tsv --seed 6133
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log27.tsv --observed-out batch_ns_1/obs27.tsv --seed 6753
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log28.tsv --observed-out batch_ns_1/obs28.tsv --seed 6857
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log29.tsv --observed-out batch_ns_1/obs29.tsv --seed 7245
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log30.tsv --observed-out batch_ns_1/obs30.tsv --seed 7607
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log31.tsv --observed-out batch_ns_1/obs31.tsv --seed 8033
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log32.tsv --observed-out batch_ns_1/obs32.tsv --seed 8038
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log33.tsv --observed-out batch_ns_1/obs33.tsv --seed 8579
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log34.tsv --observed-out batch_ns_1/obs34.tsv --seed 8785
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log35.tsv --observed-out batch_ns_1/obs35.tsv --seed 8988
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log36.tsv --observed-out batch_ns_1/obs36.tsv --seed 9122
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log37.tsv --observed-out batch_ns_1/obs37.tsv --seed 9431
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log38.tsv --observed-out batch_ns_1/obs38.tsv --seed 9553
+python simRec_batch.py genome_chrXV.csv --n-cells 88 --n-gen 3000 --p-rec 7.4e-10 --co-nco 0.5 --logged-out batch_ns_1/log39.tsv --observed-out batch_ns_1/obs39.tsv --seed 9752
