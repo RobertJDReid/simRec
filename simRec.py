@@ -113,15 +113,7 @@ def total_length(segments):
 # Input parsing
 # ---------------------------------------------------------------------------
 
-def load_genome(filepath, p_rec_default=1e-5, cen_width=200):
-    """
-    Parse a CSV with columns: chromosome, length, CEN
-    CEN column gives the centromere midpoint; cen_width sets the protected interval.
-
-    Returns a pre-replication cell dict:
-        { "A": chr_A, "B": chr_B }
-    for the first chromosome in the file (single-chromosome mode).
-    """
+def load_genome(filepath, p_rec_default=1e-5):
     with open(filepath) as fh:
         reader = csv.DictReader(fh, skipinitialspace=True)
         rows = list(reader)
@@ -129,19 +121,21 @@ def load_genome(filepath, p_rec_default=1e-5, cen_width=200):
     if not rows:
         raise ValueError("Genome file is empty.")
 
-    # Single-chromosome mode: use first row only
     row = rows[0]
-    name = row["chromosome"].strip()
-    length = int(row["length"])
-    cen_mid = int(row["CEN"])
-    cen_start = max(1, cen_mid - cen_width // 2)
-    cen_end = min(length, cen_mid + cen_width // 2)
+    name      = row["chromosome"].strip()
+    length    = int(row["length"])
+    cen_start = int(row["CEN_start"])          # ← read directly
+    cen_end   = int(row["CEN_end"])            # ← read directly
+
+    if not (1 <= cen_start <= cen_end <= length):
+        raise ValueError(
+            f"Invalid CEN range [{cen_start}, {cen_end}] for chromosome "
+            f"'{name}' of length {length}."
+        )
 
     chr_A = make_chromosome(name, length, cen_start, cen_end, p_rec_default, parent="A")
     chr_B = make_chromosome(name, length, cen_start, cen_end, p_rec_default, parent="B")
-
     return {"A": chr_A, "B": chr_B}
-
 
 # ---------------------------------------------------------------------------
 # Replication
